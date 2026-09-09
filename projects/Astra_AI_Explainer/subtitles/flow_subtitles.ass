@@ -1,0 +1,46 @@
+[Script Info]
+ScriptType: v4.00+
+PlayResX: 1080
+PlayResY: 1920
+ScaledBorderAndShadow: yes
+
+[V4+ Styles]
+Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
+Style: TikTokDefault,Arial,68,&H00FFFFFF,&H0000FFFF,&H00101010,&H80000000,-1,0,0,0,100,100,1,0,1,6,3,2,100,100,440,1
+Style: TikTokHighlight,Arial,72,&H003BF6F8,&H0000FFFF,&H00101010,&H80000000,-1,0,0,0,100,100,1,0,1,7,4,2,100,100,440,1
+
+[Events]
+Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
+Dialogue: 0,0:00:00.00,0:00:01.80,TikTokHighlight,,0,0,0,,Bạn có bao giờ tự hỏi:
+Dialogue: 0,0:00:01.80,0:00:03.90,TikTokHighlight,,0,0,0,,tại sao ý tưởng công nghệ
+Dialogue: 0,0:00:03.90,0:00:05.20,TikTokHighlight,,0,0,0,,từng mất hàng tháng trời,
+Dialogue: 0,0:00:05.20,0:00:06.60,TikTokHighlight,,0,0,0,,giờ thành hình trong vài phút?
+Dialogue: 0,0:00:06.62,0:00:08.72,TikTokDefault,,0,0,0,,Trước đây, quy trình phát triển
+Dialogue: 0,0:00:08.72,0:00:10.22,TikTokDefault,,0,0,0,,là một chuỗi phân mảnh:
+Dialogue: 0,0:00:10.22,0:00:11.52,TikTokDefault,,0,0,0,,vẽ phác thảo, khảo sát,
+Dialogue: 0,0:00:11.52,0:00:13.02,TikTokDefault,,0,0,0,,làm khung giao diện, viết code,
+Dialogue: 0,0:00:13.02,0:00:14.32,TikTokDefault,,0,0,0,,gỡ lỗi liên tục
+Dialogue: 0,0:00:14.32,0:00:15.92,TikTokDefault,,0,0,0,,rồi mới đến triển khai.
+Dialogue: 0,0:00:15.96,0:00:18.16,TikTokHighlight,,0,0,0,,Nhưng khi đa tác nhân Astra xuất hiện,
+Dialogue: 0,0:00:18.16,0:00:20.36,TikTokHighlight,,0,0,0,,toàn bộ các khâu rời rạc này
+Dialogue: 0,0:00:20.36,0:00:22.76,TikTokHighlight,,0,0,0,,được hợp nhất thành một dòng chảy.
+Dialogue: 0,0:00:22.82,0:00:25.22,TikTokDefault,,0,0,0,,Với kỹ sư phần mềm,
+Dialogue: 0,0:00:25.22,0:00:27.22,TikTokDefault,,0,0,0,,Astra không chỉ gợi ý mã nguồn.
+Dialogue: 0,0:00:27.22,0:00:29.52,TikTokDefault,,0,0,0,,Nó hiểu kiến trúc, sinh API,
+Dialogue: 0,0:00:29.52,0:00:31.72,TikTokDefault,,0,0,0,,đồng bộ cơ sở dữ liệu
+Dialogue: 0,0:00:31.72,0:00:34.22,TikTokDefault,,0,0,0,,và lặp lại 3 phương án tức thì.
+Dialogue: 0,0:00:34.27,0:00:36.67,TikTokDefault,,0,0,0,,Với nhà thiết kế,
+Dialogue: 0,0:00:36.67,0:00:39.17,TikTokDefault,,0,0,0,,không còn họp bế tắc trên Figma.
+Dialogue: 0,0:00:39.17,0:00:41.67,TikTokDefault,,0,0,0,,Astra sinh ngay 4 hướng concept,
+Dialogue: 0,0:00:41.67,0:00:44.47,TikTokDefault,,0,0,0,,để lựa chọn và tối ưu hóa tức thì.
+Dialogue: 0,0:00:44.54,0:00:46.64,TikTokDefault,,0,0,0,,Còn với nghệ sĩ 3D,
+Dialogue: 0,0:00:46.64,0:00:48.94,TikTokDefault,,0,0,0,,từ khối thô đến vật liệu & ánh sáng,
+Dialogue: 0,0:00:48.94,0:00:51.14,TikTokDefault,,0,0,0,,mọi thứ tính toán thời gian thực
+Dialogue: 0,0:00:51.14,0:00:53.34,TikTokDefault,,0,0,0,,thay vì render hàng giờ đồng hồ.
+Dialogue: 0,0:00:53.37,0:00:55.57,TikTokDefault,,0,0,0,,Điều này không thay thế con người.
+Dialogue: 0,0:00:55.57,0:00:58.17,TikTokDefault,,0,0,0,,Astra giải phóng các tác vụ nhàm chán,
+Dialogue: 0,0:00:58.17,0:01:00.77,TikTokDefault,,0,0,0,,để tập trung vào điều quan trọng nhất:
+Dialogue: 0,0:01:00.77,0:01:03.67,TikTokDefault,,0,0,0,,tư duy thẩm mỹ & định hướng chiến lược.
+Dialogue: 0,0:01:03.69,0:01:06.09,TikTokHighlight,,0,0,0,,Tương lai không thuộc về ai nhanh hơn,
+Dialogue: 0,0:01:06.09,0:01:08.49,TikTokHighlight,,0,0,0,,mà thuộc về người làm chủ tốc độ AI
+Dialogue: 0,0:01:08.49,0:01:10.69,TikTokHighlight,,0,0,0,,để hiện thực hóa tầm nhìn của mình.

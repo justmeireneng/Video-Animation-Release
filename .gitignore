@@ -1,0 +1,54 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+
+# Environments & Virtual Envs
+.venv/
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+
+# Environment Variables & Secrets
+.env
+*.local.env
+
+# Large Model Weights, Checkpoints & Caches (Do not commit to Git)
+models/
+checkpoints/
+*.pt
+*.pth
+*.bin
+*.ckpt
+*.safetensors
+*.onnx
+hf_cache/
+
+# Temporary files, Logs & Artifact caches
+temp/
+tmp/
+*.log
+logs/
+.system_generated/
+*.tmp
+*.bak
+
+# Build / Distribution
+build/
+dist/
+*.egg-info/
+
+# Output directories & raw test renders (Tracked via releases or cloud storage)
+export/
+*.raw.mp4
+*.tmp.mp3
+
+# OS / IDE generated files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp

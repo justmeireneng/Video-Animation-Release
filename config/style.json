@@ -1,0 +1,31 @@
+{
+  "version": "v0.1.0",
+  "theme": "cinematic_tech_explainer",
+  "render_target": {
+    "aspect_ratio": "9:16",
+    "resolution": [
+      1080,
+      1920
+    ],
+    "fps": 24,
+    "max_size_mb": 20
+  },
+  "subtitles": {
+    "format": "ASS",
+    "font": "Arial",
+    "font_size": 68,
+    "primary_color": "&H00FFFFFF",
+    "highlight_color": "&H003BF6F8",
+    "outline_color": "&H00101010",
+    "outline_width": 6,
+    "margin_v": 440,
+    "safe_area_y": 1450
+  },
+  "audio_mix": {
+    "narration_gain": 0.95,
+    "sfx_gain": 0.2,
+    "bgm_gain_ducked": 0.07,
+    "bgm_gain_idle": 0.15,
+    "target_lufs": -16.0
+  }
+}

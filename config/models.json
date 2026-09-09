@@ -1,0 +1,27 @@
+{
+  "story": {
+    "provider": "google_gemini",
+    "model": "gemini-2.5-pro",
+    "status": "active"
+  },
+  "image": {
+    "provider": "google_flow",
+    "model": "imagen-3",
+    "status": "active"
+  },
+  "video": {
+    "provider": "cinematic_motion_engine",
+    "model": "2.5d_parallax_light_sweep",
+    "status": "active",
+    "planned_candidate": "google_veo_2"
+  },
+  "voice": {
+    "provider": "omnivoice",
+    "fallback": "edge_tts",
+    "status": "active"
+  },
+  "compositor": {
+    "provider": "ffmpeg",
+    "status": "active"
+  }
+}

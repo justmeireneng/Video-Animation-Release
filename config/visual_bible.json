@@ -1,0 +1,105 @@
+{
+  "project_title": "Astra đang thay đổi tốc độ phát triển AI nhanh như thế nào?",
+  "global_style": {
+    "genre": "cinematic technology documentary explainer",
+    "overall_feeling": [
+      "modern",
+      "premium",
+      "intelligent",
+      "grounded",
+      "believable",
+      "slightly futuristic but realistic"
+    ],
+    "negative_style": [
+      "cheesy sci-fi",
+      "cyberpunk neon",
+      "random floating holograms",
+      "humanoid robots",
+      "oversaturated RGB",
+      "generic stock photography",
+      "readable nonsense UI text",
+      "overly glossy corporate ads"
+    ],
+    "aspect_ratio": "9:16",
+    "resolution_target": "1080x1920",
+    "platform": "TikTok / Reels / Shorts"
+  },
+  "color_bible": {
+    "primary": ["deep charcoal #1A1D24", "graphite #242933", "soft black #0F1115"],
+    "secondary": ["cool gray #4B5563", "steel gray #6B7280", "muted slate blue #3B82F6"],
+    "accent": ["electric cyan blue #00E5FF", "subtle warm amber #F59E0B"],
+    "environment": ["warm off-white #F3F4F6", "neutral concrete #9CA3AF", "dark matte glass", "anodized dark metal"],
+    "avoid": ["rainbow palette", "neon magenta", "oversaturated primary colors", "inconsistent scene palette"]
+  },
+  "lighting_bible": {
+    "type": "soft cinematic directional light",
+    "key_light": "cool white / soft daylight from high left window",
+    "screen_glow": "subtle cool blue bounce on subject face and desk",
+    "practical_light": "small warm tungsten desk lamp in background",
+    "contrast": "medium cinematic contrast with rich shadow roll-off",
+    "shadows": "soft, diffused and realistic",
+    "avoid": ["arbitrary daylight-to-neon jumps", "harsh unmotivated backlight", "overexposed lens flares"]
+  },
+  "camera_language": {
+    "lenses": {
+      "35mm": "establishing environment, wide desk setup, spatial context",
+      "50mm": "medium shots of creator, workstation interaction, balanced perspective",
+      "85mm": "close-up details, hands on keyboard, emotional focus and final insight"
+    },
+    "movement": [
+      "slow controlled dolly",
+      "subtle push-in",
+      "controlled lateral tracking",
+      "slow vertical pan",
+      "gentle pull-back",
+      "rack focus"
+    ],
+    "avoid": [
+      "rapid spinning",
+      "aggressive 360 orbit",
+      "chaotic handheld jitter",
+      "snap zooms",
+      "unmotivated high-speed drone shots"
+    ]
+  },
+  "character_bible": {
+    "character_id": "creator_01",
+    "appearance": "Vietnamese/Asian creative technologist",
+    "age": "late 20s to early 30s",
+    "build": "average to slim",
+    "hair": "dark, clean modern cut, natural texture",
+    "wardrobe": {
+      "outer": "dark charcoal relaxed overshirt",
+      "inner": "plain neutral gray-black crewneck t-shirt",
+      "bottom": "dark tailored trousers"
+    },
+    "accessories": "minimalist matte black watch, no logos",
+    "expression": ["focused", "curious", "calm", "confident"],
+    "avoid": ["brand logos", "cyberpunk suits", "formal business ties", "superhero poses"]
+  },
+  "environment_bible": {
+    "location": "modern creative tech studio",
+    "elements": [
+      "solid oak wood desk with dark matte finish",
+      "one large ultra-wide matte monitor with subtle thin bezel",
+      "laptop open to the side",
+      "low-profile mechanical keyboard with dark keycaps",
+      "wireless ergonomic mouse",
+      "small architectural desk lamp with warm light",
+      "neutral concrete/off-white studio wall",
+      "minimalist floating shelf with 2 design books and small bonsai plant",
+      "clean, realistic cable routing",
+      "glass water tumbler and tactile physical notebook"
+    ],
+    "avoid": ["spaceships", "giant sci-fi command centers", "RGB gamer bedrooms", "sterile corporate boardrooms"]
+  },
+  "reference_strategy": {
+    "priority": [
+      "1. character_reference.png",
+      "2. studio_reference.png",
+      "3. style_reference.png",
+      "4. recurring object references"
+    ],
+    "rule": "Every shot must visually anchor back to these 3 core references to preserve production continuity."
+  }
+}

@@ -1,0 +1,89 @@
+{
+  "topic": "Astra ?ang thay ??i t?c ?? ph?t tri?n AI nhanh nh? th? n?o?",
+  "target_platform": "TikTok / Reels / Shorts (9:16 vertical)",
+  "target_duration_s": 70.78,
+  "total_scenes": 8,
+  "language": "vi-VN",
+  "scenes": [
+    {
+      "scene_id": "scene_01",
+      "index": 1,
+      "title": "Hook - Chaos vs Astra Speed",
+      "narration": "B?n c? bao gi? t? h?i: t?i sao m?t ? t??ng c?ng ngh? t?ng m?t h?ng th?ng tr?i, gi? c? th? th?nh h?nh ch? trong v?i ph?t?",
+      "duration_s": 6.62,
+      "visual_intent": "M? ??u t??ng ph?n cao gi?a quy tr?nh ph?n m?nh r?i r?m v? t?c ?? t?c th? c?a Astra AI",
+      "image_file": "scenes/scene_01.png",
+      "audio_file": "audio/scene_01.wav"
+    },
+    {
+      "scene_id": "scene_02",
+      "index": 2,
+      "title": "Old Bottleneck - 6 Waterfall Stages",
+      "narration": "Tr??c ??y, quy tr?nh ph?t tri?n l? m?t chu?i ph?n m?nh: v? ph?c th?o, kh?o s?t ng??i d?ng, l?m khung giao di?n, vi?t m? ngu?n, g? l?i r?i m?i ??n tri?n khai.",
+      "duration_s": 9.34,
+      "visual_intent": "Minh h?a th?c n??c 6 c?ng ?o?n truy?n th?ng ??y n?t th?t ch?m ch?p",
+      "image_file": "scenes/scene_02.png",
+      "audio_file": "audio/scene_02.wav"
+    },
+    {
+      "scene_id": "scene_03",
+      "index": 3,
+      "title": "Astra Shift - Convergence to Core",
+      "narration": "Nh?ng khi c?c m? h?nh ?a t?c nh?n nh? Astra xu?t hi?n, to?n b? c?c kh?u r?i r?c n?y ???c h?p nh?t th?nh m?t d?ng ch?y li?n t?c.",
+      "duration_s": 6.86,
+      "visual_intent": "C?c ?ng d?ng r?i r?c h?i t? v? n?n v?o l?i ?i?u ph?i Astra AI Core",
+      "image_file": "scenes/scene_03.png",
+      "audio_file": "audio/scene_03.wav"
+    },
+    {
+      "scene_id": "scene_04",
+      "index": 4,
+      "title": "Developer Flow - Prompt & 3 Iterations",
+      "narration": "V?i k? s? ph?n m?m, Astra kh?ng ch? g?i ? m? ngu?n. N? hi?u ki?n tr?c h? th?ng, t? ??ng sinh API, ??ng b? c? s? d? li?u v? l?p l?i ba ph??ng ?n ch? trong m?t l?nh prompt.",
+      "duration_s": 11.45,
+      "visual_intent": "K? s? g? ph?m c?, m?n h?nh hi?n th? l?nh prompt v? 3 phi?n b?n ki?n tr?c ch?y song song",
+      "image_file": "scenes/scene_04.png",
+      "audio_file": "audio/scene_04.wav"
+    },
+    {
+      "scene_id": "scene_05",
+      "index": 5,
+      "title": "Designer Flow - 4 Concept Variations",
+      "narration": "V?i nh? thi?t k?, kh?ng c?n nh?ng bu?i th?o lu?n b? t?c tr?n Figma. Astra sinh ngay b?n h??ng concept tr?c quan ?? ng??i l?m s?ng t?o l?a ch?n v? t?i ?u h?a t?c th?.",
+      "duration_s": 10.27,
+      "visual_intent": "B?ng ma tr?n 4 h??ng thi?t k? giao di?n cho nh? s?ng t?o ch?n l?a ngay l?p t?c",
+      "image_file": "scenes/scene_05.png",
+      "audio_file": "audio/scene_05.wav"
+    },
+    {
+      "scene_id": "scene_06",
+      "index": 6,
+      "title": "3D Artist Flow - 4 Stage Pipeline",
+      "narration": "C?n v?i ngh? s? 3 D, t? kh?i h?nh c? b?n ??n v?t li?u ch?n th?c v? ?nh s?ng studio, m?i th? ???c t?nh to?n theo th?i gian th?c thay v? render h?ng gi? ??ng h?.",
+      "duration_s": 8.83,
+      "visual_intent": "?ng k?nh 3D bi?n ??i tr?c ti?p: Kh?i th? -> V?t li?u -> Chi?u s?ng -> S?n ph?m ho?n thi?n",
+      "image_file": "scenes/scene_06.png",
+      "audio_file": "audio/scene_06.wav"
+    },
+    {
+      "scene_id": "scene_07",
+      "index": 7,
+      "title": "Task Automation - Human vs AI Tasks",
+      "narration": "?i?u n?y kh?ng thay th? con ng??i. Astra gi?i ph?ng ch?ng ta kh?i c?c t?c v? l?p l?i nh?m ch?n, ?? con ng??i t?p trung v?o ?i?u quan tr?ng nh?t: t? duy th?m m? v? ??nh h??ng chi?n l??c.",
+      "duration_s": 10.32,
+      "visual_intent": "Ph?n c?p r? r?ng: AI ??m nh?n vi?c l?p l?i, con ng??i n?m gi? gu th?m m? v? chi?n l??c",
+      "image_file": "scenes/scene_07.png",
+      "audio_file": "audio/scene_07.wav"
+    },
+    {
+      "scene_id": "scene_08",
+      "index": 8,
+      "title": "Future Vision - Idea to Reality",
+      "narration": "T??ng lai kh?ng thu?c v? ng??i l?m vi?c nhanh h?n, m? thu?c v? ng??i bi?t l?m ch? t?c ?? c?a AI ?? hi?n th?c h?a t?m nh?n c?a m?nh.",
+      "duration_s": 7.08,
+      "visual_intent": "Ch?n dung 85mm c?n c?nh ng??i s?ng t?o t? tin l?m ch? c?ng ngh?, s?n ph?m ho?n thi?n r?c s?ng ph?a sau",
+      "image_file": "scenes/scene_08.png",
+      "audio_file": "audio/scene_08.wav"
+    }
+  ]
+}

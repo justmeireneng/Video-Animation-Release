@@ -1,0 +1,11 @@
+﻿{
+  "scene_id": "scene_01",
+  "index": 1,
+  "title": "Scene Title",
+  "narration": "Narration sentence in natural language.",
+  "duration_s": 6.5,
+  "visual_intent": "What this scene visually demonstrates",
+  "image_prompt": "Cinematic vertical 9:16 prompt...",
+  "motion_type": "push_in",
+  "sfx_type": "whoosh"
+}

@@ -1,0 +1,17 @@
+{
+  "project_name": "Astra_AI_Explainer",
+  "author": "AI Video Studio",
+  "default_language": "vi",
+  "default_voice": "vi-VN-NamMinhNeural",
+  "default_fps": 24,
+  "default_crf": 26,
+  "directories": {
+    "script": "script",
+    "storyboard": "storyboard",
+    "references": "references",
+    "scenes": "scenes",
+    "audio": "audio",
+    "subtitles": "subtitles",
+    "output": "output"
+  }
+}
