@@ -3,9 +3,9 @@ import {selectApprovedVideoSource} from '../loaders/projectLoader';
 import type {Scene} from '../types/scene';
 import {SceneImage} from './SceneImage';
 
-type Props = {scene: Scene; projectSlug: string};
+type Props = {scene: Scene; projectSlug: string; fullBleed?: boolean};
 
-export const SceneVisual = ({scene, projectSlug}: Props) => {
+export const SceneVisual = ({scene, projectSlug, fullBleed = false}: Props) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
   const durationInFrames = scene.durationInFrames;
@@ -43,7 +43,7 @@ export const SceneVisual = ({scene, projectSlug}: Props) => {
   );
 
   return (
-    <div style={{position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: 34, background: '#172131'}}>
+    <div style={{position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: fullBleed ? 0 : 34, background: '#172131'}}>
       <SceneImage scene={scene} projectSlug={projectSlug} />
       {source.loop ? (
         <Loop durationInFrames={visibleFrames}>{video()}</Loop>

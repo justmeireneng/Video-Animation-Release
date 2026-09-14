@@ -4,6 +4,7 @@ import unittest
 from pathlib import Path
 
 from src.video.scene_source_manager import SceneVideoStore
+from src.services.narration_timeline import NarrationTimelineService
 
 
 def fake_probe(path: Path, _repo_root: Path):
@@ -98,6 +99,19 @@ class TestSceneVideoStore(unittest.TestCase):
         self.assertEqual(full["source_audio"]["mode"], "full")
         self.assertEqual(full["source_audio"]["volume"], 0.6)
         self.assertFalse(full["source_audio"]["duck_under_narration"])
+
+    def test_subtitle_phrase_groups_stay_compact(self):
+        phrases = NarrationTimelineService._phrases(
+            "Đại Tây Dương không chỉ là một khoảng nước nằm giữa các lục địa."
+        )
+        self.assertEqual(" ".join(phrases), "Đại Tây Dương không chỉ là một khoảng nước nằm giữa các lục địa.")
+        self.assertTrue(all(2 <= len(phrase.split()) <= 6 for phrase in phrases))
+
+    def test_subtitle_phrase_groups_merge_single_word_clauses(self):
+        text = "Nó giữ nhiệt, tạo mưa, rồi điều hòa khí hậu."
+        phrases = NarrationTimelineService._phrases(text)
+        self.assertEqual(" ".join(phrases), text)
+        self.assertTrue(all(2 <= len(phrase.split()) <= 6 for phrase in phrases))
 
 
 if __name__ == "__main__":

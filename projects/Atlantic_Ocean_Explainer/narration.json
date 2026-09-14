@@ -1,0 +1,80 @@
+{
+  "project_name": "Atlantic_Ocean_Explainer",
+  "title": "Đại Tây Dương - Hệ thống kết nối toàn cầu",
+  "language": "vi-VN",
+  "voice": "vi-VN-NamMinhNeural",
+  "rate": "-8%",
+  "scene_pause_seconds": 0.01,
+  "scenes": [
+    {
+      "id": "scene_01",
+      "intent": "Mở đầu / hook.",
+      "narration": "Đại Tây Dương không chỉ là một khoảng nước nằm giữa các lục địa. Nó là một hệ thống khổng lồ kết nối khí hậu, địa chất, thương mại và lịch sử của cả thế giới."
+    },
+    {
+      "id": "scene_02",
+      "intent": "Giải thích vị trí địa lý.",
+      "narration": "Nó nằm giữa châu Mỹ ở phía tây, và châu Âu cùng châu Phi ở phía đông, kéo dài từ vùng Bắc Cực xuống tận những vùng biển gần Nam Cực."
+    },
+    {
+      "id": "scene_03",
+      "intent": "Giải thích quy mô.",
+      "narration": "Xét về diện tích, Đại Tây Dương là đại dương lớn thứ hai trên Trái Đất, chỉ đứng sau Thái Bình Dương."
+    },
+    {
+      "id": "scene_04",
+      "intent": "Giới thiệu Mid-Atlantic Ridge.",
+      "narration": "Nhưng điều thú vị nhất lại nằm dưới mặt nước. Chạy dọc giữa đại dương là một dãy núi ngầm khổng lồ, gọi là sống núi giữa Đại Tây Dương."
+    },
+    {
+      "id": "scene_05",
+      "intent": "Giải thích seafloor spreading / tectonic plates.",
+      "narration": "Tại đây, các mảng kiến tạo từ từ tách ra khỏi nhau. Vật chất nóng từ sâu trong Trái Đất trồi lên, nguội đi và tạo thành lớp vỏ đại dương mới."
+    },
+    {
+      "id": "scene_06",
+      "intent": "Giải thích Gulf Stream.",
+      "narration": "Đại Tây Dương cũng vận chuyển một lượng nhiệt khổng lồ. Một ví dụ nổi tiếng là dòng Gulf Stream, mang nước ấm từ vùng nhiệt đới lên phía bắc."
+    },
+    {
+      "id": "scene_07",
+      "intent": "Ảnh hưởng đến khí hậu.",
+      "narration": "Những dòng hải lưu này giúp phân phối nhiệt trên quy mô lớn, từ đó ảnh hưởng đến nhiệt độ, mưa, gió và thời tiết ở nhiều khu vực quanh Bắc Đại Tây Dương."
+    },
+    {
+      "id": "scene_08",
+      "intent": "Lịch sử hàng hải xuyên Đại Tây Dương.",
+      "narration": "Trong nhiều thế kỷ, Đại Tây Dương còn là tuyến đường kết nối các lục địa, với tàu thuyền liên tục di chuyển giữa châu Âu, châu Phi và châu Mỹ."
+    },
+    {
+      "id": "scene_09",
+      "intent": "Thương mại hiện đại.",
+      "narration": "Ngày nay, các tuyến đường đó đã trở thành một phần quan trọng của mạng lưới thương mại toàn cầu, nơi hàng hóa di chuyển giữa những cảng biển lớn ở hai bờ đại dương."
+    },
+    {
+      "id": "scene_10",
+      "intent": "Cáp ngầm xuyên Đại Tây Dương.",
+      "narration": "Nhưng không chỉ có tàu thuyền. Dưới đáy Đại Tây Dương còn có hàng loạt tuyến cáp ngầm, giúp truyền dữ liệu giữa châu Mỹ và châu Âu."
+    },
+    {
+      "id": "scene_11",
+      "intent": "Hệ sinh thái và đa dạng sinh học.",
+      "narration": "Đại Tây Dương cũng là nơi sinh sống của vô số hệ sinh thái, từ những vùng biển nhiệt đới ấm áp cho đến các vùng nước lạnh ở phía bắc."
+    },
+    {
+      "id": "scene_12",
+      "intent": "Các mối đe dọa từ con người.",
+      "narration": "Nhưng đại dương này đang chịu nhiều áp lực từ đánh bắt quá mức, ô nhiễm nhựa, giao thông hàng hải và biến đổi khí hậu."
+    },
+    {
+      "id": "scene_13",
+      "intent": "Tổng hợp các yếu tố.",
+      "narration": "Vì vậy, Đại Tây Dương không chỉ là một vùng nước. Nó là nơi địa chất, khí hậu, sinh thái và hoạt động của con người liên kết với nhau thành một hệ thống duy nhất."
+    },
+    {
+      "id": "scene_14",
+      "intent": "Kết luận.",
+      "narration": "Và đó là lý do một đại dương nằm giữa các lục địa lại có thể ảnh hưởng đến cuộc sống của hàng tỷ người, kể cả những người sống rất xa bờ biển."
+    }
+  ]
+}

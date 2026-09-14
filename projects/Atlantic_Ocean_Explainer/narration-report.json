@@ -1,0 +1,94 @@
+{
+  "project": "Atlantic_Ocean_Explainer",
+  "voice_provider": "OmniVoiceProvider",
+  "voice_backend": "existing configured fallback when local OmniVoice weights are unavailable",
+  "total_narration_duration": 129.408,
+  "total_timeline_duration": 129.7,
+  "scenes": [
+    {
+      "scene_id": "scene_01",
+      "narration_duration": 11.016,
+      "timeline_duration": 11.033,
+      "subtitle_phrases": 8
+    },
+    {
+      "scene_id": "scene_02",
+      "narration_duration": 8.64,
+      "timeline_duration": 8.667,
+      "subtitle_phrases": 7
+    },
+    {
+      "scene_id": "scene_03",
+      "narration_duration": 6.72,
+      "timeline_duration": 6.733,
+      "subtitle_phrases": 4
+    },
+    {
+      "scene_id": "scene_04",
+      "narration_duration": 9.72,
+      "timeline_duration": 9.733,
+      "subtitle_phrases": 6
+    },
+    {
+      "scene_id": "scene_05",
+      "narration_duration": 10.392,
+      "timeline_duration": 10.433,
+      "subtitle_phrases": 7
+    },
+    {
+      "scene_id": "scene_06",
+      "narration_duration": 9.648,
+      "timeline_duration": 9.667,
+      "subtitle_phrases": 6
+    },
+    {
+      "scene_id": "scene_07",
+      "narration_duration": 9.816,
+      "timeline_duration": 9.833,
+      "subtitle_phrases": 8
+    },
+    {
+      "scene_id": "scene_08",
+      "narration_duration": 9.168,
+      "timeline_duration": 9.2,
+      "subtitle_phrases": 6
+    },
+    {
+      "scene_id": "scene_09",
+      "narration_duration": 9.648,
+      "timeline_duration": 9.667,
+      "subtitle_phrases": 7
+    },
+    {
+      "scene_id": "scene_10",
+      "narration_duration": 9.144,
+      "timeline_duration": 9.167,
+      "subtitle_phrases": 5
+    },
+    {
+      "scene_id": "scene_11",
+      "narration_duration": 8.088,
+      "timeline_duration": 8.1,
+      "subtitle_phrases": 6
+    },
+    {
+      "scene_id": "scene_12",
+      "narration_duration": 7.656,
+      "timeline_duration": 7.667,
+      "subtitle_phrases": 6
+    },
+    {
+      "scene_id": "scene_13",
+      "narration_duration": 11.136,
+      "timeline_duration": 11.167,
+      "subtitle_phrases": 8
+    },
+    {
+      "scene_id": "scene_14",
+      "narration_duration": 8.616,
+      "timeline_duration": 8.633,
+      "subtitle_phrases": 7
+    }
+  ],
+  "remotion_path": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\remotion.json"
+}

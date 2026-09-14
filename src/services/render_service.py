@@ -23,6 +23,9 @@ class RemotionRenderer:
             node, str(cli), "render", "src/index.ts",
             "TikTokExplainer", relative_output.as_posix(), f"--props={props.as_posix()}",
             "--codec=h264", f"--crf={30 if preview else 23}", "--concurrency=1" if preview else "--concurrency=25%",
+            "--media-cache-size-in-bytes=251658240",
+            "--offthreadvideo-cache-size-in-bytes=268435456",
+            "--offthreadvideo-video-threads=1",
         ]
         if preview:
             command.append("--scale=0.5")

@@ -16,10 +16,13 @@ import type {RemotionProject, Scene} from '../types/scene';
 type Props = {project: RemotionProject; projectSlug: string; scene: Scene};
 
 export const SceneComposition = ({project, projectSlug, scene}: Props) => {
-  const image = <SceneVisual scene={scene} projectSlug={projectSlug} />;
+  const fullBleed = scene.layout === 'full_bleed';
+  const image = <SceneVisual scene={scene} projectSlug={projectSlug} fullBleed={fullBleed} />;
   const compactMascot = scene.layout !== 'image_left_mascot_right';
   const mascot = <Mascot projectSlug={projectSlug} mascot={project.mascot} pose={scene.mascotPose} compact={compactMascot} />;
-  const layout = scene.layout === 'image_center_mascot_corner'
+  const layout = fullBleed
+    ? image
+    : scene.layout === 'image_center_mascot_corner'
     ? <CenterMascotCorner image={image} mascot={mascot} />
     : scene.layout === 'full_image_mascot_overlay'
       ? <FullImageOverlay image={image} mascot={mascot} />

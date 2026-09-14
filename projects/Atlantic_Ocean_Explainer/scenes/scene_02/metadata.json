@@ -1,0 +1,76 @@
+{
+  "scene_id": "scene_02",
+  "narration": "Nó nằm giữa châu Mỹ ở phía tây, và châu Âu cùng châu Phi ở phía đông, kéo dài từ vùng Bắc Cực xuống tận những vùng biển gần Nam Cực.",
+  "source_video": "scenes/scene_02/source/flow_v1.mp4",
+  "source_provider": "google_flow_manual",
+  "source_filename": "Scene_2_animation:_Map_fragments_20260913102225.mp4",
+  "status": "approved",
+  "duration": 8.0,
+  "trim": {
+    "start": 0.0,
+    "end": null
+  },
+  "crop": {
+    "mode": "cover",
+    "x": 0.5,
+    "y": 0.5
+  },
+  "source_audio": {
+    "mode": "background",
+    "enabled": true,
+    "volume": 0.3,
+    "duck_under_narration": true,
+    "fade_in": 0.15,
+    "fade_out": 0.2
+  },
+  "version": 1,
+  "active_version": 1,
+  "approved_version": 1,
+  "versions": [
+    {
+      "scene_id": "scene_02",
+      "source_provider": "google_flow_manual",
+      "source_filename": "Scene_2_animation:_Map_fragments_20260913102225.mp4",
+      "source_video": "scenes/scene_02/source/flow_v1.mp4",
+      "version": 1,
+      "probe": {
+        "duration": 8.0,
+        "width": 720,
+        "height": 1280,
+        "fps": 24.0,
+        "codec": "h264",
+        "pixel_format": "yuv420p",
+        "has_audio": true,
+        "audio_codec": "aac",
+        "aspect_ratio": "720:1280",
+        "portrait": true,
+        "readable": true
+      },
+      "status": "approved",
+      "trim": {
+        "start": 0.0,
+        "end": null
+      },
+      "crop": {
+        "mode": "cover",
+        "x": 0.5,
+        "y": 0.5
+      },
+      "source_audio": {
+        "mode": "background",
+        "enabled": true,
+        "volume": 0.3,
+        "duck_under_narration": true,
+        "fade_in": 0.15,
+        "fade_out": 0.2
+      },
+      "timing": {
+        "playback_rate": 0.9231,
+        "hold_last_frame": false,
+        "loop": false
+      },
+      "created_at": "2026-09-14T02:25:59.733573+00:00",
+      "reviewed_at": "2026-09-14T09:46:06.500760+00:00"
+    }
+  ]
+}

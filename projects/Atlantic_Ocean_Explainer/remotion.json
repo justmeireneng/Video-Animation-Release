@@ -1,0 +1,1202 @@
+{
+  "name": "Đại Tây Dương - Hệ thống kết nối toàn cầu",
+  "fps": 30,
+  "width": 1080,
+  "height": 1920,
+  "style": "cartoon_explainer",
+  "sourceVideoSettings": {
+    "auto_approve_latest": false,
+    "source_audio_default": {
+      "mode": "background",
+      "volume": 0.3,
+      "duck_under_narration": true,
+      "fade_in": 0.15,
+      "fade_out": 0.2
+    }
+  },
+  "scenes": [
+    {
+      "id": "scene_01",
+      "index": 1,
+      "approved": false,
+      "durationInFrames": 331,
+      "narration": "Đại Tây Dương không chỉ là một khoảng nước nằm giữa các lục địa. Nó là một hệ thống khổng lồ kết nối khí hậu, địa chất, thương mại và lịch sử của cả thế giới.",
+      "intent": "Mở đầu / hook.",
+      "narrationAudio": "audio/scene_01.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 46,
+          "text": "Đại Tây Dương không chỉ"
+        },
+        {
+          "startFrame": 46,
+          "endFrame": 92,
+          "text": "là một khoảng nước nằm"
+        },
+        {
+          "startFrame": 92,
+          "endFrame": 128,
+          "text": "giữa các lục địa."
+        },
+        {
+          "startFrame": 128,
+          "endFrame": 183,
+          "text": "Nó là một hệ thống khổng"
+        },
+        {
+          "startFrame": 183,
+          "endFrame": 229,
+          "text": "lồ kết nối khí hậu,"
+        },
+        {
+          "startFrame": 229,
+          "endFrame": 248,
+          "text": "địa chất,"
+        },
+        {
+          "startFrame": 248,
+          "endFrame": 293,
+          "text": "thương mại và lịch sử"
+        },
+        {
+          "startFrame": 293,
+          "endFrame": 330,
+          "text": "của cả thế giới."
+        }
+      ],
+      "layout": "full_bleed",
+      "mascotPose": "idle",
+      "animation": {
+        "type": "slow_push_in"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "transition": "crossfade",
+      "videoSources": [
+        {
+          "src": "scenes/scene_01/source/flow_v1.mp4",
+          "provider": "google_flow_manual",
+          "sourceFilename": "Scene_1_animation:_The_central_20260913102225.mp4",
+          "version": 1,
+          "review": "approved",
+          "duration": 8.0,
+          "trim": {
+            "start": 0.0,
+            "end": 8.0
+          },
+          "crop": {
+            "mode": "cover",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "playbackRate": 1.0,
+          "holdLastFrame": true,
+          "loop": false,
+          "sourceAudio": {
+            "mode": "background",
+            "enabled": true,
+            "volume": 0.3,
+            "duck_under_narration": true,
+            "fade_in": 0.15,
+            "fade_out": 0.2
+          }
+        }
+      ],
+      "currentVideoVersion": 1
+    },
+    {
+      "id": "scene_02",
+      "index": 2,
+      "approved": false,
+      "durationInFrames": 260,
+      "narration": "Nó nằm giữa châu Mỹ ở phía tây, và châu Âu cùng châu Phi ở phía đông, kéo dài từ vùng Bắc Cực xuống tận những vùng biển gần Nam Cực.",
+      "intent": "Giải thích vị trí địa lý.",
+      "narrationAudio": "audio/scene_02.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 33,
+          "text": "Nó nằm giữa châu"
+        },
+        {
+          "startFrame": 33,
+          "endFrame": 67,
+          "text": "Mỹ ở phía tây,"
+        },
+        {
+          "startFrame": 67,
+          "endFrame": 109,
+          "text": "và châu Âu cùng châu"
+        },
+        {
+          "startFrame": 109,
+          "endFrame": 142,
+          "text": "Phi ở phía đông,"
+        },
+        {
+          "startFrame": 142,
+          "endFrame": 184,
+          "text": "kéo dài từ vùng Bắc"
+        },
+        {
+          "startFrame": 184,
+          "endFrame": 226,
+          "text": "Cực xuống tận những vùng"
+        },
+        {
+          "startFrame": 226,
+          "endFrame": 259,
+          "text": "biển gần Nam Cực."
+        }
+      ],
+      "layout": "full_bleed",
+      "mascotPose": "idle",
+      "animation": {
+        "type": "slow_push_in"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "transition": "soft_slide",
+      "videoSources": [
+        {
+          "src": "scenes/scene_02/source/flow_v1.mp4",
+          "provider": "google_flow_manual",
+          "sourceFilename": "Scene_2_animation:_Map_fragments_20260913102225.mp4",
+          "version": 1,
+          "review": "approved",
+          "duration": 8.0,
+          "trim": {
+            "start": 0.0,
+            "end": 8.0
+          },
+          "crop": {
+            "mode": "cover",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "playbackRate": 0.9231,
+          "holdLastFrame": false,
+          "loop": false,
+          "sourceAudio": {
+            "mode": "background",
+            "enabled": true,
+            "volume": 0.3,
+            "duck_under_narration": true,
+            "fade_in": 0.15,
+            "fade_out": 0.2
+          }
+        }
+      ],
+      "currentVideoVersion": 1
+    },
+    {
+      "id": "scene_03",
+      "index": 3,
+      "approved": false,
+      "durationInFrames": 202,
+      "narration": "Xét về diện tích, Đại Tây Dương là đại dương lớn thứ hai trên Trái Đất, chỉ đứng sau Thái Bình Dương.",
+      "intent": "Giải thích quy mô.",
+      "narrationAudio": "audio/scene_03.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 37,
+          "text": "Xét về diện tích,"
+        },
+        {
+          "startFrame": 37,
+          "endFrame": 92,
+          "text": "Đại Tây Dương là đại dương"
+        },
+        {
+          "startFrame": 92,
+          "endFrame": 147,
+          "text": "lớn thứ hai trên Trái Đất,"
+        },
+        {
+          "startFrame": 147,
+          "endFrame": 202,
+          "text": "chỉ đứng sau Thái Bình Dương."
+        }
+      ],
+      "layout": "full_bleed",
+      "mascotPose": "idle",
+      "animation": {
+        "type": "slow_push_in"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "transition": "crossfade",
+      "videoSources": [
+        {
+          "src": "scenes/scene_03/source/flow_v1.mp4",
+          "provider": "google_flow_manual",
+          "sourceFilename": "Scene_3_animation:_The_large_20260913102225.mp4",
+          "version": 1,
+          "review": "approved",
+          "duration": 8.0,
+          "trim": {
+            "start": 0.0,
+            "end": 6.733
+          },
+          "crop": {
+            "mode": "cover",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "playbackRate": 1.0,
+          "holdLastFrame": false,
+          "loop": false,
+          "sourceAudio": {
+            "mode": "background",
+            "enabled": true,
+            "volume": 0.3,
+            "duck_under_narration": true,
+            "fade_in": 0.15,
+            "fade_out": 0.2
+          }
+        }
+      ],
+      "currentVideoVersion": 1
+    },
+    {
+      "id": "scene_04",
+      "index": 4,
+      "approved": false,
+      "durationInFrames": 292,
+      "narration": "Nhưng điều thú vị nhất lại nằm dưới mặt nước. Chạy dọc giữa đại dương là một dãy núi ngầm khổng lồ, gọi là sống núi giữa Đại Tây Dương.",
+      "intent": "Giới thiệu Mid-Atlantic Ridge.",
+      "narrationAudio": "audio/scene_04.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 49,
+          "text": "Nhưng điều thú vị nhất"
+        },
+        {
+          "startFrame": 49,
+          "endFrame": 97,
+          "text": "lại nằm dưới mặt nước."
+        },
+        {
+          "startFrame": 97,
+          "endFrame": 156,
+          "text": "Chạy dọc giữa đại dương là"
+        },
+        {
+          "startFrame": 156,
+          "endFrame": 214,
+          "text": "một dãy núi ngầm khổng lồ,"
+        },
+        {
+          "startFrame": 214,
+          "endFrame": 253,
+          "text": "gọi là sống núi"
+        },
+        {
+          "startFrame": 253,
+          "endFrame": 292,
+          "text": "giữa Đại Tây Dương."
+        }
+      ],
+      "layout": "full_bleed",
+      "mascotPose": "idle",
+      "animation": {
+        "type": "slow_push_in"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "transition": "paper",
+      "videoSources": [
+        {
+          "src": "scenes/scene_04/source/flow_v1.mp4",
+          "provider": "google_flow_manual",
+          "sourceFilename": "Scene_4_animation:_The_charcoal_20260913102223.mp4",
+          "version": 1,
+          "review": "approved",
+          "duration": 8.0,
+          "trim": {
+            "start": 0.0,
+            "end": 8.0
+          },
+          "crop": {
+            "mode": "cover",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "playbackRate": 1.0,
+          "holdLastFrame": true,
+          "loop": false,
+          "sourceAudio": {
+            "mode": "background",
+            "enabled": true,
+            "volume": 0.3,
+            "duck_under_narration": true,
+            "fade_in": 0.15,
+            "fade_out": 0.2
+          }
+        }
+      ],
+      "currentVideoVersion": 1
+    },
+    {
+      "id": "scene_05",
+      "index": 5,
+      "approved": false,
+      "durationInFrames": 313,
+      "narration": "Tại đây, các mảng kiến tạo từ từ tách ra khỏi nhau. Vật chất nóng từ sâu trong Trái Đất trồi lên, nguội đi và tạo thành lớp vỏ đại dương mới.",
+      "intent": "Giải thích seafloor spreading / tectonic plates.",
+      "narrationAudio": "audio/scene_05.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 20,
+          "text": "Tại đây,"
+        },
+        {
+          "startFrame": 20,
+          "endFrame": 68,
+          "text": "các mảng kiến tạo từ"
+        },
+        {
+          "startFrame": 68,
+          "endFrame": 117,
+          "text": "từ tách ra khỏi nhau."
+        },
+        {
+          "startFrame": 117,
+          "endFrame": 166,
+          "text": "Vật chất nóng từ sâu"
+        },
+        {
+          "startFrame": 166,
+          "endFrame": 214,
+          "text": "trong Trái Đất trồi lên,"
+        },
+        {
+          "startFrame": 214,
+          "endFrame": 263,
+          "text": "nguội đi và tạo thành"
+        },
+        {
+          "startFrame": 263,
+          "endFrame": 312,
+          "text": "lớp vỏ đại dương mới."
+        }
+      ],
+      "layout": "full_bleed",
+      "mascotPose": "idle",
+      "animation": {
+        "type": "slow_push_in"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "transition": "crossfade",
+      "videoSources": [
+        {
+          "src": "scenes/scene_05/source/flow_v1.mp4",
+          "provider": "google_flow_manual",
+          "sourceFilename": "Scene_5_animation:_Two_tectonic_20260913102225.mp4",
+          "version": 1,
+          "review": "approved",
+          "duration": 8.0,
+          "trim": {
+            "start": 0.0,
+            "end": 8.0
+          },
+          "crop": {
+            "mode": "cover",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "playbackRate": 1.0,
+          "holdLastFrame": true,
+          "loop": false,
+          "sourceAudio": {
+            "mode": "background",
+            "enabled": true,
+            "volume": 0.3,
+            "duck_under_narration": true,
+            "fade_in": 0.15,
+            "fade_out": 0.2
+          }
+        }
+      ],
+      "currentVideoVersion": 1
+    },
+    {
+      "id": "scene_06",
+      "index": 6,
+      "approved": false,
+      "durationInFrames": 290,
+      "narration": "Đại Tây Dương cũng vận chuyển một lượng nhiệt khổng lồ. Một ví dụ nổi tiếng là dòng Gulf Stream, mang nước ấm từ vùng nhiệt đới lên phía bắc.",
+      "intent": "Giải thích Gulf Stream.",
+      "narrationAudio": "audio/scene_06.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 58,
+          "text": "Đại Tây Dương cũng vận chuyển"
+        },
+        {
+          "startFrame": 58,
+          "endFrame": 106,
+          "text": "một lượng nhiệt khổng lồ."
+        },
+        {
+          "startFrame": 106,
+          "endFrame": 154,
+          "text": "Một ví dụ nổi tiếng"
+        },
+        {
+          "startFrame": 154,
+          "endFrame": 193,
+          "text": "là dòng Gulf Stream,"
+        },
+        {
+          "startFrame": 193,
+          "endFrame": 241,
+          "text": "mang nước ấm từ vùng"
+        },
+        {
+          "startFrame": 241,
+          "endFrame": 289,
+          "text": "nhiệt đới lên phía bắc."
+        }
+      ],
+      "layout": "full_bleed",
+      "mascotPose": "idle",
+      "animation": {
+        "type": "slow_push_in"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "transition": "soft_slide",
+      "videoSources": [
+        {
+          "src": "scenes/scene_06/source/flow_v1.mp4",
+          "provider": "google_flow_manual",
+          "sourceFilename": "Scene_6_animation:_A_vibrant_20260913102225.mp4",
+          "version": 1,
+          "review": "approved",
+          "duration": 8.0,
+          "trim": {
+            "start": 0.0,
+            "end": 8.0
+          },
+          "crop": {
+            "mode": "cover",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "playbackRate": 1.0,
+          "holdLastFrame": true,
+          "loop": false,
+          "sourceAudio": {
+            "mode": "background",
+            "enabled": true,
+            "volume": 0.3,
+            "duck_under_narration": true,
+            "fade_in": 0.15,
+            "fade_out": 0.2
+          }
+        }
+      ],
+      "currentVideoVersion": 1
+    },
+    {
+      "id": "scene_07",
+      "index": 7,
+      "approved": false,
+      "durationInFrames": 295,
+      "narration": "Những dòng hải lưu này giúp phân phối nhiệt trên quy mô lớn, từ đó ảnh hưởng đến nhiệt độ, mưa, gió và thời tiết ở nhiều khu vực quanh Bắc Đại Tây Dương.",
+      "intent": "Ảnh hưởng đến khí hậu.",
+      "narrationAudio": "audio/scene_07.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 43,
+          "text": "Những dòng hải lưu này"
+        },
+        {
+          "startFrame": 43,
+          "endFrame": 78,
+          "text": "giúp phân phối nhiệt"
+        },
+        {
+          "startFrame": 78,
+          "endFrame": 112,
+          "text": "trên quy mô lớn,"
+        },
+        {
+          "startFrame": 112,
+          "endFrame": 147,
+          "text": "từ đó ảnh hưởng"
+        },
+        {
+          "startFrame": 147,
+          "endFrame": 182,
+          "text": "đến nhiệt độ, mưa,"
+        },
+        {
+          "startFrame": 182,
+          "endFrame": 225,
+          "text": "gió và thời tiết ở"
+        },
+        {
+          "startFrame": 225,
+          "endFrame": 259,
+          "text": "nhiều khu vực quanh"
+        },
+        {
+          "startFrame": 259,
+          "endFrame": 294,
+          "text": "Bắc Đại Tây Dương."
+        }
+      ],
+      "layout": "full_bleed",
+      "mascotPose": "idle",
+      "animation": {
+        "type": "slow_push_in"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "transition": "crossfade",
+      "videoSources": [
+        {
+          "src": "scenes/scene_07/source/flow_v1.mp4",
+          "provider": "google_flow_manual",
+          "sourceFilename": "Scene_7_animation:_Halftone_cutouts_20260913102227.mp4",
+          "version": 1,
+          "review": "approved",
+          "duration": 8.0,
+          "trim": {
+            "start": 0.0,
+            "end": 8.0
+          },
+          "crop": {
+            "mode": "cover",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "playbackRate": 1.0,
+          "holdLastFrame": true,
+          "loop": false,
+          "sourceAudio": {
+            "mode": "background",
+            "enabled": true,
+            "volume": 0.3,
+            "duck_under_narration": true,
+            "fade_in": 0.15,
+            "fade_out": 0.2
+          }
+        }
+      ],
+      "currentVideoVersion": 1
+    },
+    {
+      "id": "scene_08",
+      "index": 8,
+      "approved": false,
+      "durationInFrames": 276,
+      "narration": "Trong nhiều thế kỷ, Đại Tây Dương còn là tuyến đường kết nối các lục địa, với tàu thuyền liên tục di chuyển giữa châu Âu, châu Phi và châu Mỹ.",
+      "intent": "Lịch sử hàng hải xuyên Đại Tây Dương.",
+      "narrationAudio": "audio/scene_08.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 35,
+          "text": "Trong nhiều thế kỷ,"
+        },
+        {
+          "startFrame": 35,
+          "endFrame": 89,
+          "text": "Đại Tây Dương còn là tuyến"
+        },
+        {
+          "startFrame": 89,
+          "endFrame": 142,
+          "text": "đường kết nối các lục địa,"
+        },
+        {
+          "startFrame": 142,
+          "endFrame": 186,
+          "text": "với tàu thuyền liên tục"
+        },
+        {
+          "startFrame": 186,
+          "endFrame": 231,
+          "text": "di chuyển giữa châu Âu,"
+        },
+        {
+          "startFrame": 231,
+          "endFrame": 275,
+          "text": "châu Phi và châu Mỹ."
+        }
+      ],
+      "layout": "full_bleed",
+      "mascotPose": "idle",
+      "animation": {
+        "type": "slow_push_in"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "transition": "paper",
+      "videoSources": [
+        {
+          "src": "scenes/scene_08/source/flow_v1.mp4",
+          "provider": "google_flow_manual",
+          "sourceFilename": "Scene_8_animation:_B&W_archival_20260913102224.mp4",
+          "version": 1,
+          "review": "approved",
+          "duration": 8.0,
+          "trim": {
+            "start": 0.0,
+            "end": 8.0
+          },
+          "crop": {
+            "mode": "cover",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "playbackRate": 1.0,
+          "holdLastFrame": true,
+          "loop": false,
+          "sourceAudio": {
+            "mode": "background",
+            "enabled": true,
+            "volume": 0.3,
+            "duck_under_narration": true,
+            "fade_in": 0.15,
+            "fade_out": 0.2
+          }
+        }
+      ],
+      "currentVideoVersion": 1
+    },
+    {
+      "id": "scene_09",
+      "index": 9,
+      "approved": false,
+      "durationInFrames": 290,
+      "narration": "Ngày nay, các tuyến đường đó đã trở thành một phần quan trọng của mạng lưới thương mại toàn cầu, nơi hàng hóa di chuyển giữa những cảng biển lớn ở hai bờ đại dương.",
+      "intent": "Thương mại hiện đại.",
+      "narrationAudio": "audio/scene_09.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 17,
+          "text": "Ngày nay,"
+        },
+        {
+          "startFrame": 17,
+          "endFrame": 66,
+          "text": "các tuyến đường đó đã trở"
+        },
+        {
+          "startFrame": 66,
+          "endFrame": 116,
+          "text": "thành một phần quan trọng của"
+        },
+        {
+          "startFrame": 116,
+          "endFrame": 165,
+          "text": "mạng lưới thương mại toàn cầu,"
+        },
+        {
+          "startFrame": 165,
+          "endFrame": 206,
+          "text": "nơi hàng hóa di chuyển"
+        },
+        {
+          "startFrame": 206,
+          "endFrame": 248,
+          "text": "giữa những cảng biển lớn"
+        },
+        {
+          "startFrame": 248,
+          "endFrame": 289,
+          "text": "ở hai bờ đại dương."
+        }
+      ],
+      "layout": "full_bleed",
+      "mascotPose": "idle",
+      "animation": {
+        "type": "slow_push_in"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "transition": "crossfade",
+      "videoSources": [
+        {
+          "src": "scenes/scene_09/source/flow_v1.mp4",
+          "provider": "google_flow_manual",
+          "sourceFilename": "Scene_9_animation:_A_halftone_20260913102225.mp4",
+          "version": 1,
+          "review": "approved",
+          "duration": 8.0,
+          "trim": {
+            "start": 0.0,
+            "end": 8.0
+          },
+          "crop": {
+            "mode": "cover",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "playbackRate": 1.0,
+          "holdLastFrame": true,
+          "loop": false,
+          "sourceAudio": {
+            "mode": "background",
+            "enabled": true,
+            "volume": 0.3,
+            "duck_under_narration": true,
+            "fade_in": 0.15,
+            "fade_out": 0.2
+          }
+        }
+      ],
+      "currentVideoVersion": 1
+    },
+    {
+      "id": "scene_10",
+      "index": 10,
+      "approved": false,
+      "durationInFrames": 275,
+      "narration": "Nhưng không chỉ có tàu thuyền. Dưới đáy Đại Tây Dương còn có hàng loạt tuyến cáp ngầm, giúp truyền dữ liệu giữa châu Mỹ và châu Âu.",
+      "intent": "Cáp ngầm xuyên Đại Tây Dương.",
+      "narrationAudio": "audio/scene_10.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 59,
+          "text": "Nhưng không chỉ có tàu thuyền."
+        },
+        {
+          "startFrame": 59,
+          "endFrame": 117,
+          "text": "Dưới đáy Đại Tây Dương còn"
+        },
+        {
+          "startFrame": 117,
+          "endFrame": 176,
+          "text": "có hàng loạt tuyến cáp ngầm,"
+        },
+        {
+          "startFrame": 176,
+          "endFrame": 225,
+          "text": "giúp truyền dữ liệu giữa"
+        },
+        {
+          "startFrame": 225,
+          "endFrame": 274,
+          "text": "châu Mỹ và châu Âu."
+        }
+      ],
+      "layout": "full_bleed",
+      "mascotPose": "idle",
+      "animation": {
+        "type": "slow_push_in"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "transition": "soft_slide",
+      "videoSources": [
+        {
+          "src": "scenes/scene_10/source/flow_v1.mp4",
+          "provider": "google_flow_manual",
+          "sourceFilename": "Scene_10_animation:_The_ocean_20260913102223.mp4",
+          "version": 1,
+          "review": "approved",
+          "duration": 8.0,
+          "trim": {
+            "start": 0.0,
+            "end": 8.0
+          },
+          "crop": {
+            "mode": "cover",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "playbackRate": 1.0,
+          "holdLastFrame": true,
+          "loop": false,
+          "sourceAudio": {
+            "mode": "background",
+            "enabled": true,
+            "volume": 0.3,
+            "duck_under_narration": true,
+            "fade_in": 0.15,
+            "fade_out": 0.2
+          }
+        }
+      ],
+      "currentVideoVersion": 1
+    },
+    {
+      "id": "scene_11",
+      "index": 11,
+      "approved": false,
+      "durationInFrames": 243,
+      "narration": "Đại Tây Dương cũng là nơi sinh sống của vô số hệ sinh thái, từ những vùng biển nhiệt đới ấm áp cho đến các vùng nước lạnh ở phía bắc.",
+      "intent": "Hệ sinh thái và đa dạng sinh học.",
+      "narrationAudio": "audio/scene_11.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 39,
+          "text": "Đại Tây Dương cũng là"
+        },
+        {
+          "startFrame": 39,
+          "endFrame": 78,
+          "text": "nơi sinh sống của vô"
+        },
+        {
+          "startFrame": 78,
+          "endFrame": 110,
+          "text": "số hệ sinh thái,"
+        },
+        {
+          "startFrame": 110,
+          "endFrame": 157,
+          "text": "từ những vùng biển nhiệt đới"
+        },
+        {
+          "startFrame": 157,
+          "endFrame": 204,
+          "text": "ấm áp cho đến các vùng"
+        },
+        {
+          "startFrame": 204,
+          "endFrame": 243,
+          "text": "nước lạnh ở phía bắc."
+        }
+      ],
+      "layout": "full_bleed",
+      "mascotPose": "idle",
+      "animation": {
+        "type": "slow_push_in"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "transition": "crossfade",
+      "videoSources": [
+        {
+          "src": "scenes/scene_11/source/flow_v1.mp4",
+          "provider": "google_flow_manual",
+          "sourceFilename": "Scene_11_animation:_Halftone_sea_20260913102227.mp4",
+          "version": 1,
+          "review": "approved",
+          "duration": 8.0,
+          "trim": {
+            "start": 0.0,
+            "end": 8.0
+          },
+          "crop": {
+            "mode": "cover",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "playbackRate": 0.9877,
+          "holdLastFrame": false,
+          "loop": false,
+          "sourceAudio": {
+            "mode": "background",
+            "enabled": true,
+            "volume": 0.3,
+            "duck_under_narration": true,
+            "fade_in": 0.15,
+            "fade_out": 0.2
+          }
+        }
+      ],
+      "currentVideoVersion": 1
+    },
+    {
+      "id": "scene_12",
+      "index": 12,
+      "approved": false,
+      "durationInFrames": 230,
+      "narration": "Nhưng đại dương này đang chịu nhiều áp lực từ đánh bắt quá mức, ô nhiễm nhựa, giao thông hàng hải và biến đổi khí hậu.",
+      "intent": "Các mối đe dọa từ con người.",
+      "narrationAudio": "audio/scene_12.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 44,
+          "text": "Nhưng đại dương này đang"
+        },
+        {
+          "startFrame": 44,
+          "endFrame": 88,
+          "text": "chịu nhiều áp lực từ"
+        },
+        {
+          "startFrame": 88,
+          "endFrame": 124,
+          "text": "đánh bắt quá mức,"
+        },
+        {
+          "startFrame": 124,
+          "endFrame": 150,
+          "text": "ô nhiễm nhựa,"
+        },
+        {
+          "startFrame": 150,
+          "endFrame": 195,
+          "text": "giao thông hàng hải và"
+        },
+        {
+          "startFrame": 195,
+          "endFrame": 230,
+          "text": "biến đổi khí hậu."
+        }
+      ],
+      "layout": "full_bleed",
+      "mascotPose": "idle",
+      "animation": {
+        "type": "slow_push_in"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "transition": "paper",
+      "videoSources": [
+        {
+          "src": "scenes/scene_12/source/flow_v1.mp4",
+          "provider": "google_flow_manual",
+          "sourceFilename": "Scene_12_animation:_Red_marker_20260913102227.mp4",
+          "version": 1,
+          "review": "approved",
+          "duration": 8.0,
+          "trim": {
+            "start": 0.0,
+            "end": 8.0
+          },
+          "crop": {
+            "mode": "cover",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "playbackRate": 1.0435,
+          "holdLastFrame": false,
+          "loop": false,
+          "sourceAudio": {
+            "mode": "background",
+            "enabled": true,
+            "volume": 0.3,
+            "duck_under_narration": true,
+            "fade_in": 0.15,
+            "fade_out": 0.2
+          }
+        }
+      ],
+      "currentVideoVersion": 1
+    },
+    {
+      "id": "scene_13",
+      "index": 13,
+      "approved": false,
+      "durationInFrames": 335,
+      "narration": "Vì vậy, Đại Tây Dương không chỉ là một vùng nước. Nó là nơi địa chất, khí hậu, sinh thái và hoạt động của con người liên kết với nhau thành một hệ thống duy nhất.",
+      "intent": "Tổng hợp các yếu tố.",
+      "narrationAudio": "audio/scene_13.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 19,
+          "text": "Vì vậy,"
+        },
+        {
+          "startFrame": 19,
+          "endFrame": 65,
+          "text": "Đại Tây Dương không chỉ"
+        },
+        {
+          "startFrame": 65,
+          "endFrame": 102,
+          "text": "là một vùng nước."
+        },
+        {
+          "startFrame": 102,
+          "endFrame": 148,
+          "text": "Nó là nơi địa chất,"
+        },
+        {
+          "startFrame": 148,
+          "endFrame": 167,
+          "text": "khí hậu,"
+        },
+        {
+          "startFrame": 167,
+          "endFrame": 223,
+          "text": "sinh thái và hoạt động của"
+        },
+        {
+          "startFrame": 223,
+          "endFrame": 278,
+          "text": "con người liên kết với nhau"
+        },
+        {
+          "startFrame": 278,
+          "endFrame": 334,
+          "text": "thành một hệ thống duy nhất."
+        }
+      ],
+      "layout": "full_bleed",
+      "mascotPose": "idle",
+      "animation": {
+        "type": "slow_push_in"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "transition": "crossfade",
+      "videoSources": [
+        {
+          "src": "scenes/scene_13/source/flow_v1.mp4",
+          "provider": "google_flow_manual",
+          "sourceFilename": "Scene_13_animation:_A_rapid_20260913102227.mp4",
+          "version": 1,
+          "review": "approved",
+          "duration": 8.0,
+          "trim": {
+            "start": 0.0,
+            "end": 8.0
+          },
+          "crop": {
+            "mode": "cover",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "playbackRate": 1.0,
+          "holdLastFrame": true,
+          "loop": false,
+          "sourceAudio": {
+            "mode": "background",
+            "enabled": true,
+            "volume": 0.3,
+            "duck_under_narration": true,
+            "fade_in": 0.15,
+            "fade_out": 0.2
+          }
+        }
+      ],
+      "currentVideoVersion": 1
+    },
+    {
+      "id": "scene_14",
+      "index": 14,
+      "approved": false,
+      "durationInFrames": 259,
+      "narration": "Và đó là lý do một đại dương nằm giữa các lục địa lại có thể ảnh hưởng đến cuộc sống của hàng tỷ người, kể cả những người sống rất xa bờ biển.",
+      "intent": "Kết luận.",
+      "narrationAudio": "audio/scene_14.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 38,
+          "text": "Và đó là lý do"
+        },
+        {
+          "startFrame": 38,
+          "endFrame": 76,
+          "text": "một đại dương nằm giữa"
+        },
+        {
+          "startFrame": 76,
+          "endFrame": 114,
+          "text": "các lục địa lại có"
+        },
+        {
+          "startFrame": 114,
+          "endFrame": 152,
+          "text": "thể ảnh hưởng đến cuộc"
+        },
+        {
+          "startFrame": 152,
+          "endFrame": 190,
+          "text": "sống của hàng tỷ người,"
+        },
+        {
+          "startFrame": 190,
+          "endFrame": 228,
+          "text": "kể cả những người sống"
+        },
+        {
+          "startFrame": 228,
+          "endFrame": 258,
+          "text": "rất xa bờ biển."
+        }
+      ],
+      "layout": "full_bleed",
+      "mascotPose": "idle",
+      "animation": {
+        "type": "slow_push_in"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.5
+      },
+      "transition": "soft_slide",
+      "videoSources": [
+        {
+          "src": "scenes/scene_14/source/flow_v1.mp4",
+          "provider": "google_flow_manual",
+          "sourceFilename": "Scene_14_animation:_The_signal-red_20260913102225.mp4",
+          "version": 1,
+          "review": "approved",
+          "duration": 8.0,
+          "trim": {
+            "start": 0.0,
+            "end": 8.0
+          },
+          "crop": {
+            "mode": "cover",
+            "x": 0.5,
+            "y": 0.5
+          },
+          "playbackRate": 0.9266,
+          "holdLastFrame": false,
+          "loop": false,
+          "sourceAudio": {
+            "mode": "background",
+            "enabled": true,
+            "volume": 0.3,
+            "duck_under_narration": true,
+            "fade_in": 0.15,
+            "fade_out": 0.2
+          }
+        }
+      ],
+      "currentVideoVersion": 1
+    }
+  ]
+}

@@ -1,11 +1,13 @@
 from __future__ import annotations
 
 import json
+import re
+import shutil
 import tempfile
 import zipfile
 from collections import Counter
 from datetime import datetime, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
 from src.services.project_state import ProjectStateService
@@ -29,13 +31,31 @@ class ImportService:
         self.state.set("UPLOADED", archive.name)
         with tempfile.TemporaryDirectory(prefix="flow-import-") as temp:
             root = Path(temp)
+            original_names: dict[Path, str] = {}
             with zipfile.ZipFile(archive) as package:
-                for member in package.infolist():
-                    destination = (root / member.filename).resolve()
-                    if not destination.is_relative_to(root.resolve()):
-                        raise ValueError(f"Unsafe ZIP member: {member.filename}")
-                package.extractall(root)
-            return self._import_folder(root, source_label=archive.name)
+                for index, member in enumerate(package.infolist(), 1):
+                    destination = self._safe_zip_destination(root, member.filename, index)
+                    if member.is_dir():
+                        destination.mkdir(parents=True, exist_ok=True)
+                        continue
+                    destination.parent.mkdir(parents=True, exist_ok=True)
+                    with package.open(member) as source, destination.open("wb") as target:
+                        shutil.copyfileobj(source, target)
+                    original_names[destination.resolve()] = PurePosixPath(member.filename).name
+            return self._import_folder(root, source_label=archive.name, original_names=original_names)
+
+    @staticmethod
+    def _safe_zip_destination(root: Path, member_name: str, index: int) -> Path:
+        member = PurePosixPath(member_name.replace("\\", "/"))
+        if member.is_absolute() or ".." in member.parts:
+            raise ValueError(f"Unsafe ZIP member: {member_name}")
+        parts = [re.sub(r'[<>:"|?*\x00-\x1f]', "_", part).rstrip(". ") or "_" for part in member.parts]
+        destination = (root.joinpath(*parts)).resolve()
+        if not destination.is_relative_to(root.resolve()):
+            raise ValueError(f"Unsafe ZIP member: {member_name}")
+        if destination.exists() and not member_name.endswith("/"):
+            destination = destination.with_stem(f"{destination.stem}__zip_{index}")
+        return destination
 
     def import_folder(self, folder_path: Path | str) -> dict[str, Any]:
         folder = Path(folder_path).resolve()
@@ -44,7 +64,8 @@ class ImportService:
         self.state.set("UPLOADED", folder.name)
         return self._import_folder(folder, source_label=folder.name)
 
-    def _import_folder(self, folder: Path, source_label: str) -> dict[str, Any]:
+    def _import_folder(self, folder: Path, source_label: str,
+                       original_names: dict[Path, str] | None = None) -> dict[str, Any]:
         project = json.loads(self.store.remotion_path.read_text(encoding="utf-8"))
         mapping = SceneMapper.scene_map(project)
         found, unmatched = SceneMapper.scan(folder)
@@ -63,7 +84,7 @@ class ImportService:
                 scene_id,
                 item.path,
                 provider="google_flow_manual",
-                source_filename=item.path.name,
+                source_filename=(original_names or {}).get(item.path.resolve(), item.path.name),
             )
             records.append({"scene_number": item.number, "scene_id": scene_id, **record})
             if record["status"] == "invalid":

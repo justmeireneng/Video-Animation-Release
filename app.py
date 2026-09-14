@@ -16,6 +16,7 @@ from src.review.scene_video_review import serve_scene_video_review
 from src.services.import_service import ImportService
 from src.services.project_state import ProjectStateService
 from src.services.render_service import RenderService
+from src.services.narration_timeline import NarrationTimelineService
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -241,6 +242,10 @@ def main():
     render_preview = subparsers.add_parser("render-preview", help="Render a 540x960 review MP4")
     render_preview.add_argument("project_name")
 
+    narration = subparsers.add_parser("prepare-narration", help="Synthesize narration and build phrase subtitle timing")
+    narration.add_argument("project_name")
+    narration.add_argument("--reuse-audio", action="store_true")
+
     project_status = subparsers.add_parser("project-status", help="Show ZIP-first project workflow state")
     project_status.add_argument("project_name")
 
@@ -292,6 +297,8 @@ def main():
         _print_video_record(_video_store(args.project_name).set_subtitle_offset(args.scene, args.y))
     elif args.command == "render-preview":
         print(f"Preview render: {RenderService(ROOT_DIR, args.project_name).render_preview()}")
+    elif args.command == "prepare-narration":
+        _print_video_record(NarrationTimelineService(ROOT_DIR, args.project_name).prepare(synthesize=not args.reuse_audio))
     elif args.command == "project-status":
         _print_video_record(ProjectStateService(ROOT_DIR / "projects" / args.project_name).get())
     elif args.command == "approve-project":

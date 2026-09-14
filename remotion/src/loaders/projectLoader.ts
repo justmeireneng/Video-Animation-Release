@@ -31,12 +31,14 @@ export const normalizeProject = (input: unknown): RemotionProject => {
   required(Number.isInteger(raw.width) && Number(raw.width) > 0, 'width must be a positive integer.');
   required(Number.isInteger(raw.height) && Number(raw.height) > 0, 'height must be a positive integer.');
   required(Array.isArray(raw.scenes) && raw.scenes.length > 0, 'At least one scene is required.');
-  required(raw.mascot && typeof raw.mascot === 'object', 'Missing mascot asset map.');
+  const allFullBleed = (raw.scenes as Array<Record<string, unknown>>).every((scene) => scene.layout === 'full_bleed');
+  required(allFullBleed || (raw.mascot && typeof raw.mascot === 'object'), 'Missing mascot asset map.');
 
-  const mascotRaw = raw.mascot as Record<string, unknown>;
-  required(typeof mascotRaw.idle === 'string' && mascotRaw.idle.length > 0, 'mascot.idle is required.');
+  const mascotRaw = (raw.mascot ?? {idle: ''}) as Record<string, unknown>;
+  required(allFullBleed || (typeof mascotRaw.idle === 'string' && mascotRaw.idle.length > 0), 'mascot.idle is required.');
+  const idleMascot = typeof mascotRaw.idle === 'string' ? mascotRaw.idle : '';
   const mascot = Object.fromEntries(
-    mascotPoses.map((pose) => [pose, typeof mascotRaw[pose] === 'string' ? mascotRaw[pose] : mascotRaw.idle]),
+    mascotPoses.map((pose) => [pose, typeof mascotRaw[pose] === 'string' ? mascotRaw[pose] : idleMascot]),
   ) as RemotionProject['mascot'];
 
   const scenes = (raw.scenes as Array<Record<string, unknown>>)

@@ -77,6 +77,14 @@ describe('projectLoader', () => {
     expect(project.mascot.happy).toBe('mascot/idle.png');
   });
 
+  it('accepts a full-bleed video-only project without mascot assets', () => {
+    const input = fixture([scene({layout: 'full_bleed', approved: false, image: undefined})]);
+    delete (input as {mascot?: unknown}).mascot;
+    const project = normalizeProject(input);
+    expect(project.scenes[0].layout).toBe('full_bleed');
+    expect(project.mascot.idle).toBe('');
+  });
+
   it('uses only approved video and prioritizes Flow over other generated clips', () => {
     const project = normalizeProject(fixture([scene({videoSources: [
       {src: 'pending.mp4', provider: 'google_flow_manual', version: 3, review: 'pending_review', duration: 6, trim: {start: 0, end: 6}, crop: {mode: 'cover', x: 0.5, y: 0.5}},

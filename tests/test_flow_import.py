@@ -86,10 +86,11 @@ class TestFlowImport(unittest.TestCase):
         (self.input / "Scene_2_corrupt.mp4").write_bytes(b"corrupt")
         archive = self.root / "flow.zip"
         with zipfile.ZipFile(archive, "w") as package:
-            package.write(self.input / "Scene_2_corrupt.mp4", "nested/Scene_2_corrupt.mp4")
+            package.write(self.input / "Scene_2_corrupt.mp4", "nested/Scene_2:corrupt.mp4")
         report = ImportService(self.root, "Demo", prober=fake_probe).import_zip(archive)
         self.assertEqual(len(report["invalid_files"]), 1)
         self.assertEqual(report["scene_map"][0]["status"], "invalid")
+        self.assertEqual(report["scene_map"][0]["source_filename"], "Scene_2:corrupt.mp4")
         self.assertTrue((self.root / "projects" / "Demo" / "scenes" / "shot_2" / "source" / "flow_v1.mp4").is_file())
 
 

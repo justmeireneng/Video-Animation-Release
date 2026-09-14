@@ -18,6 +18,7 @@ export const animationPresets = [
 export type AnimationPreset = (typeof animationPresets)[number];
 
 export const layouts = [
+  'full_bleed',
   'image_left_mascot_right',
   'image_center_mascot_corner',
   'full_image_mascot_overlay',
