@@ -1,13 +1,13 @@
 {
   "version": "v0.1.0",
-  "theme": "cinematic_tech_explainer",
+  "theme": "cartoon_educational_explainer",
   "render_target": {
     "aspect_ratio": "9:16",
     "resolution": [
       1080,
       1920
     ],
-    "fps": 24,
+    "fps": 30,
     "max_size_mb": 20
   },
   "subtitles": {

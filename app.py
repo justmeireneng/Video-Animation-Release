@@ -11,6 +11,12 @@ import subprocess
 import sys
 from pathlib import Path
 
+from src.video.scene_source_manager import SceneVideoStore
+from src.review.scene_video_review import serve_scene_video_review
+from src.services.import_service import ImportService
+from src.services.project_state import ProjectStateService
+from src.services.render_service import RenderService
+
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
 if hasattr(sys.stderr, "reconfigure"):
@@ -27,10 +33,12 @@ def show_status(project_name: str):
 
     print(f"=== PROJECT STATUS: {project_name} ===")
     scenes = list((proj_dir / "scenes").glob("*.png"))
+    source_videos = list((proj_dir / "scenes").glob("*/source/*.mp4"))
     audio = list((proj_dir / "audio").glob("*.wav"))
     output = list((proj_dir / "output").glob("*.mp4"))
 
     print(f"  Scenes count: {len(scenes)} images (1080x1920)")
+    print(f"  Source clips: {len(source_videos)} versioned files")
     print(f"  Audio count:  {len(audio)} files")
     print(f"  Final videos: {len(output)} files")
     for vid in output:
@@ -72,6 +80,81 @@ def export_project(project_name: str, target_export_dir: Path | str = "export"):
     (exp_dir / "export_manifest.json").write_text(json.dumps(manifest, indent=2, ensure_ascii=False), encoding="utf-8")
     print(f"SUCCESS: Exported {manifest['files_count']} files to: {exp_dir}")
 
+
+def _run_remotion(project_name: str, studio: bool = False) -> None:
+    """Launch the additive Remotion runtime without changing the Python environment."""
+    proj_dir = ROOT_DIR / "projects" / project_name
+    props_file = proj_dir / "remotion-props.json"
+    if not props_file.exists():
+        print(f"Error: Remotion props not found: {props_file}")
+        sys.exit(1)
+
+    node = shutil.which("node")
+    cli = ROOT_DIR / "remotion" / "node_modules" / "@remotion" / "cli" / "remotion-cli.js"
+    if not node or not cli.is_file():
+        print("Error: install the Remotion runtime first: pnpm --dir remotion install")
+        sys.exit(1)
+
+    relative_props = Path("..") / "projects" / project_name / "remotion-props.json"
+    command = [node, str(cli)]
+    if studio:
+        command += ["studio", "src/index.ts", f"--props={relative_props.as_posix()}"]
+    else:
+        output = Path("..") / "projects" / project_name / "output" / "final_remotion.mp4"
+        command += [
+            "render", "src/index.ts", "TikTokExplainer", output.as_posix(),
+            f"--props={relative_props.as_posix()}", "--codec=h264", "--crf=23", "--concurrency=25%",
+        ]
+    subprocess.run(command, cwd=ROOT_DIR / "remotion", check=True)
+
+
+def _video_store(project_name: str) -> SceneVideoStore:
+    try:
+        return SceneVideoStore(ROOT_DIR, project_name)
+    except (FileNotFoundError, ValueError) as exc:
+        print(f"Error: {exc}")
+        sys.exit(1)
+
+
+def _print_video_record(record: dict) -> None:
+    print(json.dumps(record, ensure_ascii=False, indent=2))
+
+
+def _print_import_report(report: dict) -> None:
+    print("IMPORT SUMMARY")
+    print(f"Files found: {report['files_found']}")
+    print(f"Valid files: {report['valid_files']}")
+    print(f"Invalid files: {len(report['invalid_files'])}")
+    print(f"Mapped scenes: {len(report['mapped_scenes'])}")
+    print(f"Duplicate scenes: {len(report['duplicate_scenes'])}")
+    print(f"Missing scenes: {', '.join(report['missing_scenes']) or 'none'}")
+    print("\nSCENE MAP")
+    for item in report["scene_map"]:
+        probe = item["probe"]
+        audio = item["source_audio"]
+        print(
+            f"{item['scene_id']}: {item['source_filename']} -> flow_v{item['version']} | "
+            f"{probe['duration']}s {probe['width']}x{probe['height']} {probe['fps']}fps "
+            f"audio={probe['has_audio']} mode={audio['mode']} volume={audio['volume']:.2f} status={item['status']}"
+        )
+    if report["warnings"]:
+        print("\nWARNINGS")
+        for warning in report["warnings"]:
+            print(f"- {warning}")
+    readiness = report["render_readiness"]
+    print("\nRENDER READINESS")
+    print(f"Approved: {readiness['approved']}")
+    print(f"Pending review: {readiness['pending_review']}")
+    print(f"Missing: {readiness['missing']}")
+    print(f"Invalid: {readiness['invalid']}")
+    print("\nSOURCE AUDIO")
+    for item in report["source_audio"]:
+        print(
+            f"{item['scene_id']} v{item['version']}: has_audio={item['has_audio']} "
+            f"mode={item['mode']} volume={item['volume']:.2f} duck={item['duck_under_narration']}"
+        )
+    print(f"\nReport: {report['report_path']}")
+
 def main():
     parser = argparse.ArgumentParser(description="Video Animation Studio Master CLI")
     subparsers = parser.add_subparsers(dest="command", required=True)
@@ -83,11 +166,140 @@ def main():
     exp_parser.add_argument("project_name", help="Name of project")
     exp_parser.add_argument("--out", default="export", help="Output directory")
 
+    preview_parser = subparsers.add_parser("preview-video", help="Open a project in Remotion Studio")
+    preview_parser.add_argument("project_name", help="Project with remotion-props.json")
+
+    render_parser = subparsers.add_parser("render-video", help="Render a project through Remotion")
+    render_parser.add_argument("project_name", help="Project with remotion-props.json")
+
+    import_video = subparsers.add_parser("import-scene-video", help="Import a new immutable source-video version")
+    import_video.add_argument("project_name")
+    import_video.add_argument("--scene", required=True)
+    import_video.add_argument("--file", required=True)
+    import_video.add_argument("--provider", default="google_flow_manual")
+
+    import_zip = subparsers.add_parser("import-flow-zip", help="Import and auto-map a Google Flow ZIP")
+    import_zip.add_argument("project_name")
+    import_zip.add_argument("zip_path")
+
+    import_folder = subparsers.add_parser("import-flow-folder", help="Import and auto-map a Google Flow folder")
+    import_folder.add_argument("project_name")
+    import_folder.add_argument("folder_path")
+
+    review_video = subparsers.add_parser("review-scene-video", help="Show prompt, clip versions, trim, crop, and review state")
+    review_video.add_argument("project_name")
+    review_video.add_argument("--scene", required=True)
+    review_video.add_argument("--json", action="store_true", help="Print metadata instead of opening the browser UI")
+    review_video.add_argument("--port", type=int, default=8811)
+    review_video.add_argument("--no-open", action="store_true", help="Serve the UI without launching a browser")
+
+    approve_video = subparsers.add_parser("approve-scene-video", help="Approve one source-video version")
+    approve_video.add_argument("project_name")
+    approve_video.add_argument("--scene", required=True)
+    approve_video.add_argument("--version", type=int, required=True)
+
+    reject_video = subparsers.add_parser("reject-scene-video", help="Reject one source-video version")
+    reject_video.add_argument("project_name")
+    reject_video.add_argument("--scene", required=True)
+    reject_video.add_argument("--version", type=int, required=True)
+
+    trim_video = subparsers.add_parser("trim-scene-video", help="Set non-destructive trim for one clip version")
+    trim_video.add_argument("project_name")
+    trim_video.add_argument("--scene", required=True)
+    trim_video.add_argument("--version", type=int, required=True)
+    trim_video.add_argument("--start", type=float, required=True)
+    trim_video.add_argument("--end", type=float, required=True)
+
+    crop_video = subparsers.add_parser("crop-scene-video", help="Set source-video crop focal point")
+    crop_video.add_argument("project_name")
+    crop_video.add_argument("--scene", required=True)
+    crop_video.add_argument("--version", type=int, required=True)
+    crop_video.add_argument("--x", type=float, required=True)
+    crop_video.add_argument("--y", type=float, required=True)
+    crop_video.add_argument("--mode", choices=["cover", "contain"], default="cover")
+
+    source_audio = subparsers.add_parser("set-scene-audio", help="Set mute/background/full source audio policy")
+    source_audio.add_argument("project_name")
+    source_audio.add_argument("--scene", required=True)
+    source_audio.add_argument("--version", type=int, required=True)
+    source_audio.add_argument("--mode", choices=["mute", "background", "full"], required=True)
+    source_audio.add_argument("--volume", type=float)
+    source_audio.add_argument("--duck", choices=["true", "false"])
+    source_audio.add_argument("--fade-in", type=float)
+    source_audio.add_argument("--fade-out", type=float)
+
+    transition = subparsers.add_parser("set-scene-transition", help="Override a scene transition")
+    transition.add_argument("project_name")
+    transition.add_argument("--scene", required=True)
+    transition.add_argument("--transition", choices=["crossfade", "soft_slide", "wipe_reveal", "paper", "none"], required=True)
+
+    subtitle_offset = subparsers.add_parser("set-subtitle-offset", help="Move one scene subtitle vertically in pixels")
+    subtitle_offset.add_argument("project_name")
+    subtitle_offset.add_argument("--scene", required=True)
+    subtitle_offset.add_argument("--y", type=int, required=True)
+
+    render_preview = subparsers.add_parser("render-preview", help="Render a 540x960 review MP4")
+    render_preview.add_argument("project_name")
+
+    project_status = subparsers.add_parser("project-status", help="Show ZIP-first project workflow state")
+    project_status.add_argument("project_name")
+
+    approve_project = subparsers.add_parser("approve-project", help="Approve the current final review")
+    approve_project.add_argument("project_name")
+
+    request_changes = subparsers.add_parser("request-changes", help="Mark the project as needing scene-level changes")
+    request_changes.add_argument("project_name")
+    request_changes.add_argument("--note", default="")
+
     args = parser.parse_args()
     if args.command == "status":
         show_status(args.project_name)
     elif args.command == "export-project":
         export_project(args.project_name, args.out)
+    elif args.command == "preview-video":
+        _run_remotion(args.project_name, studio=True)
+    elif args.command == "render-video":
+        print(f"Final render: {RenderService(ROOT_DIR, args.project_name).render_final()}")
+    elif args.command == "import-scene-video":
+        _print_video_record(_video_store(args.project_name).import_video(args.scene, args.file, args.provider, Path(args.file).name))
+        print("STOP: video_status=pending_review. Approve or reject before final composition uses this clip.")
+    elif args.command == "import-flow-zip":
+        _print_import_report(ImportService(ROOT_DIR, args.project_name).import_zip(args.zip_path))
+    elif args.command == "import-flow-folder":
+        _print_import_report(ImportService(ROOT_DIR, args.project_name).import_folder(args.folder_path))
+    elif args.command == "review-scene-video":
+        store = _video_store(args.project_name)
+        if args.json:
+            _print_video_record(store.load_metadata(args.scene))
+        else:
+            serve_scene_video_review(store, args.scene, port=args.port, open_browser=not args.no_open)
+    elif args.command == "approve-scene-video":
+        _print_video_record(_video_store(args.project_name).approve(args.scene, args.version))
+    elif args.command == "reject-scene-video":
+        _print_video_record(_video_store(args.project_name).reject(args.scene, args.version))
+    elif args.command == "trim-scene-video":
+        _print_video_record(_video_store(args.project_name).set_trim(args.scene, args.version, args.start, args.end))
+    elif args.command == "crop-scene-video":
+        _print_video_record(_video_store(args.project_name).set_crop(args.scene, args.version, args.x, args.y, args.mode))
+    elif args.command == "set-scene-audio":
+        duck = None if args.duck is None else args.duck == "true"
+        _print_video_record(_video_store(args.project_name).set_source_audio(
+            args.scene, args.version, args.mode, args.volume, duck, args.fade_in, args.fade_out,
+        ))
+    elif args.command == "set-scene-transition":
+        _print_video_record(_video_store(args.project_name).set_transition(args.scene, args.transition))
+    elif args.command == "set-subtitle-offset":
+        _print_video_record(_video_store(args.project_name).set_subtitle_offset(args.scene, args.y))
+    elif args.command == "render-preview":
+        print(f"Preview render: {RenderService(ROOT_DIR, args.project_name).render_preview()}")
+    elif args.command == "project-status":
+        _print_video_record(ProjectStateService(ROOT_DIR / "projects" / args.project_name).get())
+    elif args.command == "approve-project":
+        state = ProjectStateService(ROOT_DIR / "projects" / args.project_name)
+        state.set("APPROVED", "final review approved")
+        _print_video_record(state.set("DONE", "final MP4 ready for download"))
+    elif args.command == "request-changes":
+        _print_video_record(ProjectStateService(ROOT_DIR / "projects" / args.project_name).set("NEEDS_CHANGES", args.note))
 
 if __name__ == "__main__":
     main()

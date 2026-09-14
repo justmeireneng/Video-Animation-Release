@@ -6,6 +6,27 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [Unreleased]
+
+### Added
+- ZIP-first Google Flow manual import for ZIP/folders, robust scene parsing and numeric sort,
+  ffprobe validation, immutable `flow_vN.mp4` versions, duplicate/missing/invalid reports, and
+  explicit project workflow state.
+- Per-scene source review UI and CLI controls for approve/reject/rollback, trim, cover/contain
+  focal crop, source-audio mute/background/full, volume/ducking/fades, transition, and subtitle
+  vertical offset.
+- Fast 540x960 preview rendering plus Remotion-to-FFmpeg final mastering at 1080x1920/30fps.
+- Bundled Be Vietnam Pro font files for deterministic Vietnamese subtitle glyph coverage.
+- JSON-driven Remotion 4.0.523 composition runtime with four vertical layouts, deterministic
+  animation presets, focal-point motion, mascot fallback, phrase subtitles, narration, SFX,
+  Studio preview, CLI rendering, Python wrappers, and loader tests.
+
+### Changed
+- Approved manual Flow video now has visual priority over imported/generated video and approved
+  image animation fallback; OmniVoice narration remains the master timeline.
+- Primary composition direction is now 2D cartoon educational animation while the existing
+  Python, OmniVoice, FFmpeg, review, and cinematic fallback modules remain intact.
+
 ## [0.1.0] - 2026-09-09
 
 ### Added

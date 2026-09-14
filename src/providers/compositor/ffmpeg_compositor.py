@@ -4,6 +4,10 @@ from pathlib import Path
 from ..base import CompositorProvider, CompositionRequest
 
 class FFmpegCompositorProvider(CompositorProvider):
+    @staticmethod
+    def _filter_path(path: Path) -> str:
+        return path.resolve().as_posix().replace(":", "\\:").replace("'", "\\'")
+
     def compose(self, request: CompositionRequest) -> Path:
         out_p = Path(request.output_path)
         out_p.parent.mkdir(parents=True, exist_ok=True)
@@ -32,8 +36,15 @@ class FFmpegCompositorProvider(CompositorProvider):
         ]
         if request.subtitle_ass and Path(request.subtitle_ass).exists():
             sub_p = Path(request.subtitle_ass).resolve()
+            default_fonts = Path(__file__).resolve().parents[3] / "assets" / "fonts"
+            fonts_dir = Path(request.fonts_dir).resolve() if request.fonts_dir else default_fonts
+            if not fonts_dir.is_dir():
+                raise FileNotFoundError(f"Bundled subtitle font directory not found: {fonts_dir}")
             cmd.insert(4, "-vf")
-            cmd.insert(5, f"ass='{sub_p.as_posix()}'")
+            cmd.insert(
+                5,
+                f"ass=filename='{self._filter_path(sub_p)}':fontsdir='{self._filter_path(fonts_dir)}'",
+            )
 
         subprocess.run(cmd, check=True)
         return out_p

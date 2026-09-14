@@ -2,7 +2,7 @@
 import subprocess
 from pathlib import Path
 from ..base import VideoProvider, VideoGenerationRequest
-from core.motion.cinematic_engine import CinematicMotionEngine, MotionConfig, MotionType
+from ...video.cinematic_engine import CinematicMotionEngine, MotionConfig
 
 class CinematicMotionVideoProvider(VideoProvider):
     def __init__(self, target_w: int = 1080, target_h: int = 1920):

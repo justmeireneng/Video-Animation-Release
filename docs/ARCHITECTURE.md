@@ -1,5 +1,57 @@
 # System Architecture
 
+## v0.3 ZIP-first Google Flow source workflow
+
+Google Flow Ultra is an external, manual source-clip tool. This repository does not call a
+Flow/Veo API and does not automate the Flow website. `ImportService` accepts a ZIP or folder,
+`SceneMapper` parses `Scene[_ -]?(\d+)` case-insensitively and sorts numerically, and
+`SceneVideoStore` validates each MP4 with ffprobe before saving immutable `flow_vN.mp4`
+versions and metadata.
+
+```text
+Flow ZIP/folder -> ImportService -> SceneMapper -> ProbeService -> SourceVersionManager
+                -> ReviewService/UI -> approved source or image fallback
+                -> Remotion (visual, trim/crop, source audio, captions, narration, SFX/BGM)
+                -> FFmpegFinalizer (loudness/final mux) -> preview.mp4 / final.mp4
+```
+
+Narration from OmniVoice is the master timeline. Per-scene source audio supports `mute`,
+`background` (default 0.30 with narration ducking), and explicit `full`. Project workflow state
+is stored separately by `ProjectStateService`, keeping CLI orchestration thin and suitable for
+a future upload/review UI.
+
+## v0.2 Remotion composition layer
+
+The integration is additive. Existing Python modules still own story generation, storyboard
+planning, approved scene-image generation, OmniVoice/EdgeTTS narration, SFX preparation,
+review gates, and orchestration. The legacy `CinematicMotionEngine` remains available as a
+fallback and is not called by the Remotion renderer.
+
+```text
+Topic -> Python story/storyboard -> approved illustration + approved mascot assets
+      -> OmniVoice narration + SFX/BGM
+      -> projects/<name>/remotion.json
+      -> Remotion Studio review
+      -> Remotion visual/audio timeline (1080x1920, 30fps, H.264 MP4)
+      -> FFmpeg loudness normalization/final mux when required
+```
+
+`remotion/` is a separate Node runtime inside this repository. It reads project JSON instead
+of hard-coding scenes. `calculateMetadata()` derives resolution, FPS, duration, and resolved
+props from the JSON. Required assets are checked before render, and every scene must have
+`approved: true`.
+
+Responsibilities:
+
+- Remotion: layouts, scene/mask motion, focal-point transforms, mascot presentation, subtitles,
+  transitions, and the visual timeline.
+- FFmpeg: existing audio mastering, EBU R128 normalization, final mux, compatibility transcode,
+  and legacy fallback composition.
+- Python: content generation, provider orchestration, review gates, and CLI wrappers.
+
+The renderer uses the project directory as Remotion's public directory, so it reuses approved
+assets in place and does not duplicate scene images or voice files.
+
 T?i li?u n?y m? t? chi ti?t ki?n tr?c module, lu?ng d? li?u v? s? ?? ph? thu?c (Dependency Flow) c?a d? ?n.
 
 ---
@@ -17,7 +69,7 @@ T?i li?u n?y m? t? chi ti?t ki?n tr?c module, lu?ng d? li?u v? s? ?? ph? thu?c (
 - **`src.providers.compositor`**: T? ??ng gh?p n?i video, l?ng ti?ng, h?a ?m v? burn ph? ?? dynamic ASS v?o v?ng an to?n TikTok ($Y \approx 1450\text{px}$).
 
 ### B. Future Extension Modules (v0.2+)
-- **`src.providers.video.google_flow`**: Adapter k?t n?i tr?c ti?p v?i Google Cloud Vertex AI Veo 2.
+- **Flow/Veo API adapters**: intentionally out of scope; source clips are imported manually.
 - **`src.providers.video.wan_video`**: Adapter k?t n?i ComfyUI ch?y m? h?nh Wan 2.2 tr?n c?m m?y ch? GPU.
 - **`src.providers.video.ltx_video`**: Adapter sinh video th?i gian th?c ph?c v? xem tr??c t?c th?.
 - **`web_studio_ui`**: Giao di?n ng??i d?ng tr?n web (Next.js / FastAPI) cho ph?p qu?n l? d? ?n tr?c quan.

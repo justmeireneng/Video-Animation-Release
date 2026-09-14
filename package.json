@@ -1,0 +1,12 @@
+{
+  "name": "video-animation-release",
+  "private": true,
+  "scripts": {
+    "build": "cd remotion && node node_modules/@remotion/cli/remotion-cli.js bundle src/index.ts",
+    "remotion:studio": "pnpm --dir remotion run remotion:studio",
+    "remotion:render": "pnpm --dir remotion run remotion:render",
+    "remotion:test-render": "pnpm --dir remotion run remotion:test-render",
+    "remotion:test": "cd remotion && node node_modules/vitest/vitest.mjs run",
+    "remotion:typecheck": "cd remotion && node node_modules/typescript/bin/tsc --noEmit"
+  }
+}

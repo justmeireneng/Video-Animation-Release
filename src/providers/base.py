@@ -40,6 +40,26 @@ class VideoProvider(ABC):
     def animate_image(self, request: VideoGenerationRequest) -> Path:
         pass
 
+
+@dataclass
+class SceneVideoGenerationRequest:
+    scene_id: str
+    prompt: str
+    reference_images: list[Path | str] = field(default_factory=list)
+    duration_s: float = 6.0
+    aspect_ratio: str = "9:16"
+    output_path: Path | str = "clip.mp4"
+    motion_prompt: str = ""
+    extra_params: dict[str, Any] = field(default_factory=dict)
+
+
+class SceneVideoProvider(ABC):
+    """Vendor-neutral interface for scene-level source-video generation."""
+
+    @abstractmethod
+    def generate_scene_video(self, request: SceneVideoGenerationRequest) -> Path:
+        pass
+
 @dataclass
 class VoiceGenerationRequest:
     text: str
@@ -62,6 +82,7 @@ class CompositionRequest:
     sfx_audio: Path | str | None = None
     bgm_audio: Path | str | None = None
     subtitle_ass: Path | str | None = None
+    fonts_dir: Path | str | None = None
     output_path: Path | str = "final_video.mp4"
     crf: int = 24
     fps: int = 24

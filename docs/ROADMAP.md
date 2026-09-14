@@ -1,5 +1,27 @@
 # Long-Term Development Roadmap
 
+## Phase 2B: ZIP-first Flow sources (`v0.3.0`)
+
+- [x] Import ZIP/folder and detect `Scene_<number>` with numeric sorting.
+- [x] Map by scene index, report missing/unmatched/duplicate files, and preserve every duplicate.
+- [x] Probe media, save immutable `flow_vN.mp4` versions, and support approve/reject/rollback.
+- [x] Add trim, crop/focal point, transition, subtitle offset, and per-scene source-audio controls.
+- [x] Compose approved video with image fallback and render fast preview/final mastered MP4.
+- [x] Add a dependency-free scene review UI and project workflow state.
+- [ ] Wrap the stable services in a full upload/mapping/final-review application.
+- [ ] Import and review the user's real Google Flow ZIP.
+
+## Phase 2A: Remotion cartoon composition (`v0.2.0`)
+
+- [x] Add isolated Remotion/TypeScript runtime without replacing Python.
+- [x] Add JSON-driven 1080x1920, 30fps composition and dynamic metadata.
+- [x] Add four layouts, deterministic motion presets, focal-point animation, and parallax fallback.
+- [x] Add mascot motion/pose resolution, phrase subtitles, narration, SFX, and transitions.
+- [x] Add Studio/render commands, Python wrappers, asset review gate, and loader tests.
+- [ ] Replace the current Astra photorealistic scene set with human-approved cartoon illustrations.
+- [ ] Supply approved transparent assets for all eight `creator_01` mascot poses.
+- [ ] Add a dedicated low-volume BGM asset and run the existing FFmpeg loudness mastering pass.
+
 ---
 
 ## Phase 1: Visual Pipeline Stabilization (HI?N T?I - `v0.1.0`)
@@ -14,10 +36,10 @@
 
 ---
 
-## Phase 2: Video Generation Backend Integration (`v0.2.0`)
-- [ ] T?ch h?p Google Cloud Vertex AI Veo 2 API khi c? quy?n truy c?p GA.
+## Phase 2: Video Source Integration (`v0.2.0`)
+- [x] Use manual Google Flow ZIP/folder import; API and browser automation are out of scope.
 - [ ] X?y d?ng adapter ComfyUI API cho m? h?nh Wan 2.2 / LTX Video tr?n m?y ch? GPU.
-- [ ] T? ??ng h?a qu? tr?nh ??ng g?i v? nh?p l?i video t? Google Flow web.
+- [x] Automate local mapping/versioning after a manual Flow download.
 - [ ] Thu?t to?n kh? rung (RIFE) v? n?ng n?t khung h?nh (Real-ESRGAN).
 
 ---

@@ -1,0 +1,26 @@
+{
+  "name": "video-animation-remotion",
+  "version": "0.2.0",
+  "private": true,
+  "scripts": {
+    "build": "node node_modules/@remotion/cli/remotion-cli.js bundle src/index.ts",
+    "remotion:studio": "remotion studio src/index.ts",
+    "remotion:render": "remotion render src/index.ts TikTokExplainer ../projects/Astra_AI_Explainer/output/final_remotion.mp4 --props=../projects/Astra_AI_Explainer/remotion-props.json --codec=h264 --crf=23 --concurrency=25%",
+    "remotion:test-render": "remotion render src/index.ts TikTokExplainer ../projects/Astra_AI_Explainer/output/astra_remotion_test.mp4 --props=../projects/Astra_AI_Explainer/remotion-props.json --codec=h264 --crf=26 --concurrency=1",
+    "test": "node node_modules/vitest/vitest.mjs run",
+    "typecheck": "node node_modules/typescript/bin/tsc --noEmit"
+  },
+  "dependencies": {
+    "@remotion/cli": "4.0.523",
+    "@remotion/media": "4.0.523",
+    "react": "19.2.3",
+    "react-dom": "19.2.3",
+    "remotion": "4.0.523"
+  },
+  "devDependencies": {
+    "@types/react": "19.2.7",
+    "@types/react-dom": "19.2.3",
+    "typescript": "5.9.3",
+    "vitest": "4.0.9"
+  }
+}

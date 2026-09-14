@@ -1,5 +1,48 @@
 # Developer Setup Guide
 
+## ZIP-first commands
+
+```bash
+python app.py import-flow-zip Astra_AI_Explainer path/to/flow.zip
+python app.py import-flow-folder Astra_AI_Explainer path/to/flow-folder
+python app.py review-scene-video Astra_AI_Explainer --scene scene_01
+python app.py render-preview Astra_AI_Explainer
+python app.py render-video Astra_AI_Explainer
+```
+
+`ffprobe` and `ffmpeg` may come from PATH or the installed Remotion compositor. Imported clips
+remain pending until approved; no Flow/Veo credentials or browser automation are required.
+
+## Remotion runtime (v0.2)
+
+Prerequisites: Node.js 16 or newer (Node 20+ recommended), pnpm, and a Chromium-compatible
+local rendering environment. The verified machine uses Node `24.19.0` and pnpm `11.19.0`.
+Python dependencies are unchanged.
+
+```bash
+cd remotion
+pnpm install
+pnpm run typecheck
+pnpm test
+pnpm run build
+cd ..
+pnpm run remotion:studio
+pnpm run remotion:test-render
+```
+
+Equivalent npm-facing root commands are `npm run remotion:studio` and
+`npm run remotion:render` when npm is available. Python wrappers are:
+
+```bash
+python app.py preview-video Astra_AI_Explainer
+python app.py render-preview Astra_AI_Explainer
+python app.py render-video Astra_AI_Explainer
+```
+
+Studio reads `projects/Astra_AI_Explainer/remotion.json`, supports timeline scrubbing, and
+previews the same data used by CLI rendering. On low-power machines, keep render concurrency
+at `1` or `25%` and retain the 1080x1920/30fps target.
+
 H??ng d?n chi ti?t thi?t l?p m?i tr??ng ph?t tri?n ??c l?p (ho?n to?n kh?ng ph? thu?c Antigravity):
 
 ---

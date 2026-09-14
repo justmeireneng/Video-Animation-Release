@@ -1,5 +1,60 @@
 # Project Context
 
+## Current direction: ZIP-first source video
+
+Creators generate scene MP4 files manually in Google Flow Ultra, download a ZIP/folder, then
+import it locally. Filenames containing `Scene_<number>` are numerically mapped to project scene
+indices, probed, versioned without overwrite, reviewed, and approved. Remotion composes approved
+Flow clips first while preserving approved-image animation fallback. OmniVoice remains the master
+narration; source ambience is controlled per scene. Flow/Veo API calls and Flow browser automation
+are explicitly outside the current phase.
+
+## Current direction: cartoon-first Remotion pipeline
+
+The primary composition target is now a modern 2D cartoon educational explainer for vertical
+TikTok, Shorts, and Reels. Scene images remain visual-first and human-approved. Remotion adds
+deterministic semantic motion, the fixed `creator_01` mascot, captions, transitions, narration,
+and SFX. It never generates the scene artwork.
+
+The repository deliberately keeps both runtimes:
+
+- Python: story, storyboard, image-provider adapters, OmniVoice/EdgeTTS, review, SFX, orchestration.
+- Node/Remotion: animation, layout, mascot, subtitle presentation, timeline, MP4 render.
+
+The existing FFmpeg and cinematic renderer code remains intact for mastering and fallback.
+The sample's current scene PNG files are legacy photorealistic assets; they may be used for
+technical integration testing but do not satisfy the final cartoon-art direction until a human
+approves replacement illustrations.
+
+Review flow: generate image -> contact-sheet review -> approve -> build/validate Remotion JSON
+-> Studio review -> test render -> video review -> final render/master.
+
+## Remotion audit (2026-09-11)
+
+- Stable version audited and pinned: `4.0.523`.
+- Runtime requirement: Node.js `>=16`; Node 24 is verified locally.
+- Package manager: pnpm is used locally; npm, yarn, and Bun are also supported by Studio docs.
+- Studio: `remotion studio`; CLI render: `remotion render`; Node rendering APIs include
+  `bundle()`, `selectComposition()`, and `renderMedia()`.
+- Dynamic data: input props plus `calculateMetadata()` drive JSON-loaded composition metadata.
+- Media: `<Img>`/`staticFile()` for images and `<Audio>` from `@remotion/media` for audio.
+- Captions: Remotion provides `@remotion/captions`; this project renders its already-timed phrase
+  JSON directly to preserve the current subtitle pipeline.
+- Animation: `interpolate()`, `spring()`, and easing utilities; transition APIs are available in
+  `@remotion/transitions`. This module uses lightweight deterministic transitions for weaker CPUs.
+- Output: CLI defaults to H.264 and supports MP4 audio encoding. Local rendering uses a browser
+  runtime and Remotion's packaged compositor; system FFmpeg remains required for the legacy final
+  mastering pipeline.
+
+### Remotion license
+
+Remotion is source-available under its own two-tier Remotion License, **not MIT**. The free license
+covers individuals, non-profit/not-for-profit organizations, evaluation, and for-profit organizations
+with up to three employees; eligible users may create commercial videos. Other for-profit entities
+must obtain a Company License. Selling or sublicensing a modified derivative of Remotion itself is
+not permitted under the free terms. Re-check the license before organizational/commercial deployment:
+https://github.com/remotion-dev/remotion/blob/main/LICENSE.md
+
 ## Project Vision
 - **T?n d? ?n**: AI Video Animation Generator (Video Animation Studio)
 - **M?c ti?u**: X?y d?ng h? th?ng t? ??ng h?a s?n xu?t video gi?i th?ch c?ng ngh? (AI Explainer) ??nh d?ng d?c 9:16 t?i ?u cho TikTok, YouTube Shorts v? Meta Reels.
@@ -65,16 +120,16 @@ Final Video
 
 ---
 
-## Future Pipeline (v0.2+)
+## Source-video pipeline (v0.3)
 
 ```text
-Approved Scene Image
+Google Flow Ultra manual generation
   ?
-Video Generation Backend (Google Flow / Veo 2 / Wan 2.2 / LTX)
+Downloaded ZIP/folder with Scene_<number> MP4 files
   ?
-Scene Video Clips (Image-to-Video Animation)
+Map, ffprobe, immutable versioning, source review
   ?
-Video Review (Kh? rung, ki?m tra t?nh li?n t?c)
+Approved video or approved-image fallback
   ?
 Compositor & Audio Conform
   ?

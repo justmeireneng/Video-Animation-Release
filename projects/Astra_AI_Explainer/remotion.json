@@ -1,0 +1,356 @@
+{
+  "name": "Astra AI Explainer - Remotion Test",
+  "fps": 30,
+  "width": 1080,
+  "height": 1920,
+  "style": "cartoon_explainer",
+  "mascot": {
+    "idle": "references/character/character_reference.png"
+  },
+  "sourceVideoSettings": {
+    "auto_approve_latest": false,
+    "source_audio_default": {
+      "mode": "background",
+      "volume": 0.3,
+      "duck_under_narration": true,
+      "fade_in": 0.15,
+      "fade_out": 0.2
+    }
+  },
+  "scenes": [
+    {
+      "id": "scene_01",
+      "index": 1,
+      "approved": true,
+      "durationInFrames": 199,
+      "image": "scenes/scene_01.png",
+      "narration": "Bạn có bao giờ tự hỏi: tại sao một ý tưởng công nghệ từng mất hàng tháng trời, giờ có thể thành hình chỉ trong vài phút?",
+      "narrationAudio": "audio/scene_01.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 54,
+          "text": "Bạn có bao giờ tự hỏi",
+          "keywords": [
+            "tự",
+            "hỏi"
+          ]
+        },
+        {
+          "startFrame": 54,
+          "endFrame": 117,
+          "text": "tại sao ý tưởng công nghệ",
+          "keywords": [
+            "ý",
+            "tưởng"
+          ]
+        },
+        {
+          "startFrame": 117,
+          "endFrame": 156,
+          "text": "từng mất hàng tháng trời",
+          "keywords": [
+            "tháng"
+          ]
+        },
+        {
+          "startFrame": 156,
+          "endFrame": 199,
+          "text": "giờ thành hình trong vài phút",
+          "keywords": [
+            "vài",
+            "phút"
+          ]
+        }
+      ],
+      "layout": "image_left_mascot_right",
+      "mascotPose": "surprised",
+      "animation": {
+        "type": "slow_push_in",
+        "scaleFrom": 1.0,
+        "scaleTo": 1.08
+      },
+      "focalPoint": {
+        "x": 0.62,
+        "y": 0.4
+      },
+      "transition": "crossfade",
+      "sfx": [
+        {
+          "src": "audio/sfx/paper_swipe_01.wav",
+          "startFrame": 2,
+          "volume": 0.1
+        }
+      ]
+    },
+    {
+      "id": "scene_02",
+      "index": 2,
+      "approved": true,
+      "durationInFrames": 280,
+      "image": "scenes/scene_02.png",
+      "narration": "Trước đây, quy trình phát triển là một chuỗi phân mảnh: vẽ phác thảo, khảo sát người dùng, làm khung giao diện, viết mã nguồn, gỡ lỗi rồi mới đến triển khai.",
+      "narrationAudio": "audio/scene_02.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 63,
+          "text": "Trước đây quy trình phát triển",
+          "keywords": [
+            "Trước"
+          ]
+        },
+        {
+          "startFrame": 63,
+          "endFrame": 108,
+          "text": "là một chuỗi phân mảnh",
+          "keywords": [
+            "phân",
+            "mảnh"
+          ]
+        },
+        {
+          "startFrame": 108,
+          "endFrame": 147,
+          "text": "vẽ phác thảo khảo sát",
+          "keywords": [
+            "phác",
+            "thảo"
+          ]
+        },
+        {
+          "startFrame": 147,
+          "endFrame": 192,
+          "text": "làm giao diện viết code",
+          "keywords": [
+            "code"
+          ]
+        },
+        {
+          "startFrame": 192,
+          "endFrame": 231,
+          "text": "gỡ lỗi liên tục",
+          "keywords": [
+            "lỗi"
+          ]
+        },
+        {
+          "startFrame": 231,
+          "endFrame": 280,
+          "text": "rồi mới đến triển khai",
+          "keywords": [
+            "triển",
+            "khai"
+          ]
+        }
+      ],
+      "layout": "comparison_split",
+      "mascotPose": "thinking",
+      "animation": {
+        "type": "comparison_reveal"
+      },
+      "focalPoint": {
+        "x": 0.38,
+        "y": 0.45
+      },
+      "transition": "soft_slide",
+      "sfx": [
+        {
+          "src": "audio/sfx/marker_fill_01.wav",
+          "startFrame": 18,
+          "volume": 0.035
+        }
+      ]
+    },
+    {
+      "id": "scene_03",
+      "index": 3,
+      "approved": true,
+      "durationInFrames": 206,
+      "image": "scenes/scene_03.png",
+      "narration": "Nhưng khi các mô hình đa tác nhân như Astra xuất hiện, toàn bộ các khâu rời rạc này được hợp nhất thành một dòng chảy liên tục.",
+      "narrationAudio": "audio/scene_03.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 66,
+          "text": "Khi đa tác nhân Astra xuất hiện",
+          "keywords": [
+            "Astra"
+          ]
+        },
+        {
+          "startFrame": 66,
+          "endFrame": 132,
+          "text": "toàn bộ khâu rời rạc",
+          "keywords": [
+            "rời",
+            "rạc"
+          ]
+        },
+        {
+          "startFrame": 132,
+          "endFrame": 206,
+          "text": "hợp nhất thành một dòng chảy",
+          "keywords": [
+            "hợp",
+            "nhất"
+          ]
+        }
+      ],
+      "layout": "image_center_mascot_corner",
+      "mascotPose": "explain",
+      "animation": {
+        "type": "sequential_blocks"
+      },
+      "focalPoint": {
+        "x": 0.5,
+        "y": 0.42
+      },
+      "transition": "wipe_reveal",
+      "sfx": [
+        {
+          "src": "audio/sfx/paper_swipe_01.wav",
+          "startFrame": 10,
+          "volume": 0.08
+        }
+      ]
+    },
+    {
+      "id": "scene_04",
+      "index": 4,
+      "approved": true,
+      "durationInFrames": 344,
+      "image": "scenes/scene_04.png",
+      "narration": "Với kỹ sư phần mềm, Astra không chỉ gợi ý mã nguồn. Nó hiểu kiến trúc hệ thống, tự động sinh API, đồng bộ cơ sở dữ liệu và lặp lại ba phương án chỉ trong một lệnh prompt.",
+      "narrationAudio": "audio/scene_04.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 72,
+          "text": "Với kỹ sư phần mềm",
+          "keywords": [
+            "kỹ",
+            "sư"
+          ]
+        },
+        {
+          "startFrame": 72,
+          "endFrame": 132,
+          "text": "Astra không chỉ gợi ý code",
+          "keywords": [
+            "Astra",
+            "code"
+          ]
+        },
+        {
+          "startFrame": 132,
+          "endFrame": 201,
+          "text": "Nó hiểu kiến trúc sinh API",
+          "keywords": [
+            "API"
+          ]
+        },
+        {
+          "startFrame": 201,
+          "endFrame": 267,
+          "text": "đồng bộ cơ sở dữ liệu",
+          "keywords": [
+            "đồng",
+            "bộ"
+          ]
+        },
+        {
+          "startFrame": 267,
+          "endFrame": 344,
+          "text": "và lặp ba phương án tức thì",
+          "keywords": [
+            "ba",
+            "phương",
+            "án"
+          ]
+        }
+      ],
+      "layout": "full_image_mascot_overlay",
+      "mascotPose": "point_left",
+      "animation": {
+        "type": "highlight_object"
+      },
+      "focalPoint": {
+        "x": 0.73,
+        "y": 0.48
+      },
+      "transition": "crossfade",
+      "sfx": [
+        {
+          "src": "audio/sfx/pencil_fast_01.wav",
+          "startFrame": 100,
+          "volume": 0.025
+        }
+      ]
+    },
+    {
+      "id": "scene_05",
+      "index": 5,
+      "approved": true,
+      "durationInFrames": 308,
+      "image": "scenes/scene_05.png",
+      "narration": "Với nhà thiết kế, không cần những buổi thảo luận bế tắc trên Figma. Astra sinh ngay bốn hướng concept trực quan để người làm sáng tạo lựa chọn và tối ưu hóa tức thì.",
+      "narrationAudio": "audio/scene_05.wav",
+      "subtitle": [
+        {
+          "startFrame": 0,
+          "endFrame": 72,
+          "text": "Với nhà thiết kế",
+          "keywords": [
+            "thiết",
+            "kế"
+          ]
+        },
+        {
+          "startFrame": 72,
+          "endFrame": 147,
+          "text": "không còn bế tắc trên Figma",
+          "keywords": [
+            "Figma"
+          ]
+        },
+        {
+          "startFrame": 147,
+          "endFrame": 222,
+          "text": "Astra sinh bốn hướng concept",
+          "keywords": [
+            "bốn",
+            "concept"
+          ]
+        },
+        {
+          "startFrame": 222,
+          "endFrame": 308,
+          "text": "để chọn và tối ưu tức thì",
+          "keywords": [
+            "tối",
+            "ưu"
+          ]
+        }
+      ],
+      "layout": "image_left_mascot_right",
+      "mascotPose": "happy",
+      "animation": {
+        "type": "card_entrance"
+      },
+      "focalPoint": {
+        "x": 0.56,
+        "y": 0.38
+      },
+      "transition": "soft_slide",
+      "sfx": [
+        {
+          "src": "audio/sfx/marker_soft_01.wav",
+          "startFrame": 135,
+          "volume": 0.025
+        }
+      ]
+    }
+  ]
+}

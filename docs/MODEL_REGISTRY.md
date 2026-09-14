@@ -1,5 +1,19 @@
 # AI Model Registry
 
+## v0.2 active production stack
+
+| Stage | Active component | Responsibility |
+|---|---|---|
+| Story | Existing Gemini story provider | Script and scene intent |
+| Image | Approved cartoon illustration provider | Static 2D scene artwork only |
+| Voice | OmniVoice, EdgeTTS fallback | Narration audio |
+| Animation/composition | Remotion 4.0.523 | Programmatic React animation, layouts, mascot, captions, timeline |
+| Audio/final conform | Existing FFmpeg pipeline | Ducking, loudness, mux, compatibility transcode |
+| Scene video source | Manual Google Flow ZIP/folder import | External creation; local map, probe, version and review |
+
+Remotion is **not a generative video model**. It is a programmatic animation and composition
+engine. It does not create or approve scene illustrations.
+
 B?ng ph?n lo?i chi ti?t c?c m? h?nh AI ph?c v? t?ng giai ?o?n trong pipeline:
 
 ---
@@ -25,10 +39,10 @@ B?ng ph?n lo?i chi ti?t c?c m? h?nh AI ph?c v? t?ng giai ?o?n trong pipeline:
 
 ---
 
-## 3. Video Generation Model (Image-to-Video)
-- **Role**: Image-to-Video Animation
-- **Planned Primary Candidate**: Google Flow / Veo 2 (Google Cloud Vertex AI)
-- **Status**: PLANNED (Ch? m? r?ng quy?n truy c?p GA API)
+## 3. Video Source Workflow
+- **Role**: Scene source-video ingestion
+- **Active source**: Manual Google Flow Ultra ZIP/folder import
+- **Status**: ACTIVE; no Flow/Veo API and no browser automation
 - **Current Active Fallback Engine**: `CinematicMotionEngine` (2.5D Parallax + Light Sweeps, ch?y 100% tr?n CPU)
 - **Open-Source Local Alternatives**:
   - **Wan 2.2 (14B DiT)**: T?i t?o chuy?n ??ng ph?c t?p nh?t hi?n nay qua ComfyUI.

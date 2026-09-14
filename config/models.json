@@ -6,14 +6,17 @@
   },
   "image": {
     "provider": "google_flow",
-    "model": "imagen-3",
+    "model": "cartoon_illustration_provider",
     "status": "active"
   },
   "video": {
-    "provider": "cinematic_motion_engine",
-    "model": "2.5d_parallax_light_sweep",
+    "provider": "google_flow_manual_import",
+    "model": "zip_first_scene_sources",
     "status": "active",
-    "planned_candidate": "google_veo_2"
+    "composition": "remotion",
+    "legacy_fallback": "cinematic_motion_engine",
+    "api_integration": false,
+    "browser_automation": false
   },
   "voice": {
     "provider": "omnivoice",
@@ -21,7 +24,7 @@
     "status": "active"
   },
   "compositor": {
-    "provider": "ffmpeg",
+    "provider": "remotion_visual_plus_ffmpeg_mastering",
     "status": "active"
   }
 }
