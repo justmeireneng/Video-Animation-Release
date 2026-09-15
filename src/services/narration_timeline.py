@@ -98,6 +98,8 @@ class NarrationTimelineService:
         audio_root = self.project_root / "audio"
         audio_root.mkdir(parents=True, exist_ok=True)
         voice_config = VoiceConfig.from_project(source)
+        if synthesize and voice_config.approval_required and not voice_config.approved:
+            raise RuntimeError("Voice selection is awaiting approval; narration was not regenerated.")
         voice_service = VoiceService(self.project_root)
         scenes: list[dict[str, Any]] = []
         report: list[dict[str, Any]] = []
@@ -163,7 +165,7 @@ class NarrationTimelineService:
             })
         remotion_path.write_text(json.dumps(project, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         # Scene metadata remains authoritative for imported/approved source clips.
-        SceneVideoStore(self.repo_root, self.project_name).sync_all_to_remotion()
+        SceneVideoStore(self.repo_root, self.project_name).sync_all_to_remotion(recompute_timing=synthesize)
         result = {
             "project": self.project_name,
             "voice_provider": voice_config.provider,

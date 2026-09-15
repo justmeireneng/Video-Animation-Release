@@ -281,30 +281,45 @@ class SceneVideoStore:
         _write_json(self.remotion_path, project)
 
     @staticmethod
-    def _apply_metadata_to_scene(scene: dict[str, Any], metadata: dict[str, Any]) -> None:
+    def _source_projection(item: dict[str, Any], target_duration: float | None = None) -> dict[str, Any]:
+        trim_start = float(item["trim"]["start"])
+        trim_end = float(item["trim"]["end"] or item["probe"]["duration"])
+        timing = dict(item.get("timing", {}))
+        if target_duration is not None:
+            timing = _timing_policy(trim_end - trim_start, target_duration)
+            recommended_end = timing.pop("recommended_trim_end", None)
+            if recommended_end is not None:
+                trim_end = min(trim_end, trim_start + float(recommended_end))
+        return {
+            "src": item["source_video"], "provider": item["source_provider"],
+            "sourceFilename": item["source_filename"], "version": item["version"], "review": item["status"],
+            "duration": item["probe"]["duration"], "trim": {"start": trim_start, "end": round(trim_end, 3)},
+            "crop": item["crop"], "playbackRate": timing.get("playback_rate", 1.0),
+            "holdLastFrame": timing.get("hold_last_frame", False), "loop": timing.get("loop", False),
+            "sourceAudio": item["source_audio"],
+        }
+
+    @classmethod
+    def _apply_metadata_to_scene(
+        cls, scene: dict[str, Any], metadata: dict[str, Any], target_duration: float | None = None,
+    ) -> None:
         scene["videoSources"] = [
-            {
-                "src": item["source_video"], "provider": item["source_provider"],
-                "sourceFilename": item["source_filename"], "version": item["version"], "review": item["status"],
-                "duration": item["probe"]["duration"],
-                "trim": {"start": item["trim"]["start"], "end": item["trim"]["end"] or item["probe"]["duration"]},
-                "crop": item["crop"], "playbackRate": item.get("timing", {}).get("playback_rate", 1.0),
-                "holdLastFrame": item.get("timing", {}).get("hold_last_frame", False),
-                "loop": item.get("timing", {}).get("loop", False), "sourceAudio": item["source_audio"],
-            }
+            cls._source_projection(item, target_duration)
             for item in metadata["versions"] if item["status"] != "invalid"
         ]
         scene["currentVideoVersion"] = metadata.get("active_version")
 
-    def sync_all_to_remotion(self) -> None:
+    def sync_all_to_remotion(self, *, recompute_timing: bool = False) -> None:
         """Restore source-video projections without touching narration or visual edits."""
 
         project = self._project()
+        fps = float(project.get("fps", 30))
         scenes = {str(item.get("id")): item for item in project.get("scenes", [])}
         for scene_id, scene in scenes.items():
             metadata_path = self.metadata_path(scene_id)
             if metadata_path.is_file():
-                self._apply_metadata_to_scene(scene, _read_json(metadata_path))
+                target = float(scene.get("durationInFrames", 0)) / fps if recompute_timing and fps else None
+                self._apply_metadata_to_scene(scene, _read_json(metadata_path), target)
         project.setdefault("sourceVideoSettings", {
             "auto_approve_latest": False,
             "source_audio_default": {"mode": "background", "volume": 0.30, "duck_under_narration": True},

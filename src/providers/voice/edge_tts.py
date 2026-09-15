@@ -21,8 +21,16 @@ class EdgeTTSVoiceProvider(VoiceProvider):
         tmp_mp3 = out_f.with_suffix(".tmp.mp3")
 
         async def _run():
-            com = edge_tts.Communicate(request.text, voice, rate=request.rate, pitch=request.pitch)
-            await com.save(str(tmp_mp3))
+            for attempt in range(3):
+                try:
+                    com = edge_tts.Communicate(request.text, voice, rate=request.rate, pitch=request.pitch)
+                    await com.save(str(tmp_mp3))
+                    return
+                except edge_tts.exceptions.NoAudioReceived:
+                    tmp_mp3.unlink(missing_ok=True)
+                    if attempt == 2:
+                        raise
+                    await asyncio.sleep(1.5 * (attempt + 1))
 
         asyncio.run(_run())
         ffmpeg = shutil.which("ffmpeg")

@@ -75,6 +75,7 @@ class VoiceStudioProvider(VoiceProvider):
             "reference_audio_note": "Create a VoiceStudio voice profile first, then pass its voice_id.",
             "pitch": "engine_dependent",
             "speed": True,
+            "speed_range": {"min": 0.85, "max": 1.20, "step": 0.01},
             "engine_discovery": True,
             "modes": ["auto", "voice_design", "voice_clone"],
         }

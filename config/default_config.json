@@ -4,6 +4,8 @@
   "default_language": "vi",
   "default_voice": "vi-VN-NamMinhNeural",
   "default_voice_provider": "omnivoice",
+  "default_voice_mode": "auto",
+  "default_voice_speed": 1.1,
   "default_fps": 30,
   "default_crf": 26,
   "source_video": {

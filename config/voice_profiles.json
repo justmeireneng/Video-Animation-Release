@@ -1,0 +1,26 @@
+{
+  "profiles": [
+    {
+      "profile_id": "narrator_male_01",
+      "name": "Narrator Male 01",
+      "provider": "omnivoice",
+      "mode": "voice_design",
+      "language": "vi",
+      "voice_id": "vi-VN-NamMinhNeural",
+      "design": {"gender": "male", "age": null, "pitch": "moderate"},
+      "speed": 1.08,
+      "reference_audio": null
+    },
+    {
+      "profile_id": "narrator_female_01",
+      "name": "Narrator Female 01",
+      "provider": "omnivoice",
+      "mode": "voice_design",
+      "language": "vi",
+      "voice_id": "vi-VN-HoaiMyNeural",
+      "design": {"gender": "female", "age": null, "pitch": "moderate"},
+      "speed": 1.08,
+      "reference_audio": null
+    }
+  ]
+}

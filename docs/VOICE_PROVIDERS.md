@@ -30,7 +30,22 @@ Commands:
 python app.py voice-providers
 python app.py voice-preview Atlantic_Ocean_Explainer
 python app.py voice-preview Atlantic_Ocean_Explainer --provider voicestudio --engine tts-1
+python app.py voice-control Atlantic_Ocean_Explainer
+python app.py generate-voice-comparisons Atlantic_Ocean_Explainer
+python app.py select-voice-preview Atlantic_Ocean_Explainer female_1.12
+python app.py approve-voice Atlantic_Ocean_Explainer
+python app.py regenerate-approved-narration Atlantic_Ocean_Explainer
 ```
+
+## Voice control and approval gate
+
+The local voice panel exposes provider, provider-supported modes and controls, native speed from 0.85x to 1.20x, reusable profiles, preview text, audio playback, comparison selection, and approval. Its state contract uses `voiceProvider`, `voiceMode`, `gender`, `age`, `pitch`, `speed`, `voiceId`, `referenceAudio`, `previewText`, `previewStatus`, `previewFile`, and `selectedPreview`.
+
+OmniVoice's current EdgeTTS-backed adapter implements gender through the two reported Vietnamese preset voices, pitch through native Edge prosody, and speed through native speaking rate. Age design and voice clone remain hidden because this adapter does not implement them. The comparison manifest records `age_control_applied: false` rather than claiming a synthetic age that was not requested from the engine.
+
+Selecting a preview updates only the project's `voice` config and sets `approved: false`. Full narration synthesis is blocked while `approval_required` is true and approval is false. Approval still does not render video; the separate narration action regenerates WAVs, phrase subtitle timing, scene duration, and non-destructive source-video timing projections. Imported Flow clips and storyboard content are retained.
+
+The current OmniVoice adapter delegates to Microsoft Edge TTS, so preview/narration text is sent to that external service during synthesis. Cached results stay local. VoiceStudio traffic goes only to its configured service URL.
 
 ## OmniVoice
 

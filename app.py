@@ -18,7 +18,9 @@ from src.services.project_state import ProjectStateService
 from src.services.render_service import RenderService
 from src.services.narration_timeline import NarrationTimelineService
 from src.services.voice_service import VoiceConfig, VoiceService
+from src.services.voice_control import VoiceControlService
 from src.providers.voice.registry import ProviderRegistry
+from src.review.voice_control_review import serve_voice_control
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -258,6 +260,24 @@ def main():
     voice_preview.add_argument("--text")
     voice_preview.add_argument("--out")
 
+    voice_control = subparsers.add_parser("voice-control", help="Open the capability-aware voice preview panel")
+    voice_control.add_argument("project_name")
+    voice_control.add_argument("--port", type=int, default=8822)
+    voice_control.add_argument("--no-open", action="store_true")
+
+    comparisons = subparsers.add_parser("generate-voice-comparisons", help="Generate four male/female speed previews")
+    comparisons.add_argument("project_name")
+
+    select_voice = subparsers.add_parser("select-voice-preview", help="Select a preview and update project voice config")
+    select_voice.add_argument("project_name")
+    select_voice.add_argument("preview_id", choices=["male_1.08", "male_1.12", "female_1.08", "female_1.12"])
+
+    approve_voice = subparsers.add_parser("approve-voice", help="Approve the selected voice without rendering video")
+    approve_voice.add_argument("project_name")
+
+    regenerate_voice = subparsers.add_parser("regenerate-approved-narration", help="Regenerate narration only after voice approval")
+    regenerate_voice.add_argument("project_name")
+
     project_status = subparsers.add_parser("project-status", help="Show ZIP-first project workflow state")
     project_status.add_argument("project_name")
 
@@ -337,6 +357,17 @@ def main():
         preview_report = result.to_dict()
         preview_report["warning"] = voice_service.last_warning
         _print_video_record(preview_report)
+    elif args.command == "voice-control":
+        control = VoiceControlService(ROOT_DIR / "projects" / args.project_name)
+        serve_voice_control(control, port=args.port, open_browser=not args.no_open)
+    elif args.command == "generate-voice-comparisons":
+        _print_video_record(VoiceControlService(ROOT_DIR / "projects" / args.project_name).generate_comparison_previews())
+    elif args.command == "select-voice-preview":
+        _print_video_record(VoiceControlService(ROOT_DIR / "projects" / args.project_name).select_preview(args.preview_id))
+    elif args.command == "approve-voice":
+        _print_video_record(VoiceControlService(ROOT_DIR / "projects" / args.project_name).approve_voice())
+    elif args.command == "regenerate-approved-narration":
+        _print_video_record(VoiceControlService(ROOT_DIR / "projects" / args.project_name).regenerate_narration())
     elif args.command == "project-status":
         _print_video_record(ProjectStateService(ROOT_DIR / "projects" / args.project_name).get())
     elif args.command == "approve-project":

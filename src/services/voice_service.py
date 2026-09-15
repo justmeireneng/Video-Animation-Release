@@ -29,28 +29,37 @@ def _speed_to_rate(speed: float) -> str:
 class VoiceConfig:
     provider: str = DEFAULT_VOICE_PROVIDER
     mode: str = "auto"
-    voice_id: str = "default"
+    voice_id: str | None = None
     language: str = "vi"
     speed: float = 1.0
     engine: str | None = None
     design: dict[str, Any] = field(default_factory=dict)
     reference_audio: Path | str | None = None
+    selected_preview: str | None = None
+    approval_required: bool = False
+    approved: bool = False
     options: dict[str, Any] = field(default_factory=dict)
 
     @classmethod
     def from_project(cls, project_data: dict[str, Any]) -> "VoiceConfig":
         voice = project_data.get("voice")
         if isinstance(voice, dict):
-            known = {"provider", "mode", "voice_id", "language", "speed", "engine", "design", "reference_audio"}
+            known = {
+                "provider", "mode", "voice_id", "language", "speed", "engine", "design", "reference_audio",
+                "selected_preview", "approval_required", "approved",
+            }
             return cls(
                 provider=str(voice.get("provider") or DEFAULT_VOICE_PROVIDER),
                 mode=str(voice.get("mode") or "auto"),
-                voice_id=str(voice.get("voice_id") or "default"),
+                voice_id=str(voice["voice_id"]) if voice.get("voice_id") else None,
                 language=str(voice.get("language") or project_data.get("language") or "vi"),
                 speed=float(voice.get("speed", 1.0)),
                 engine=str(voice["engine"]) if voice.get("engine") else None,
                 design=dict(voice.get("design") or {}),
                 reference_audio=voice.get("reference_audio"),
+                selected_preview=str(voice["selected_preview"]) if voice.get("selected_preview") else None,
+                approval_required=bool(voice.get("approval_required", False)),
+                approved=bool(voice.get("approved", False)),
                 options={key: value for key, value in voice.items() if key not in known},
             )
         # Backward-compatible normalization for existing narration.json files.
@@ -72,6 +81,23 @@ class VoiceConfig:
         result.update({"mode": self.mode, "speed": self.speed, "design": self.design})
         if self.engine:
             result["engine"] = self.engine
+        return result
+
+    def to_dict(self) -> dict[str, Any]:
+        result = {
+            "provider": self.provider,
+            "mode": self.mode,
+            "language": self.language,
+            "voice_id": self.voice_id,
+            "design": dict(self.design),
+            "speed": self.speed,
+            "engine": self.engine,
+            "reference_audio": str(self.reference_audio) if self.reference_audio else None,
+            "selected_preview": self.selected_preview,
+            "approval_required": self.approval_required,
+            "approved": self.approved,
+        }
+        result.update(self.options)
         return result
 
 
@@ -166,7 +192,7 @@ class VoiceService:
         pitch = str(config.options.get("pitch") or "+0Hz")
         request = VoiceGenerationRequest(
             text=text,
-            voice_id=config.voice_id,
+            voice_id=config.voice_id or "default",
             language=config.language,
             rate=rate,
             pitch=pitch,
@@ -179,7 +205,6 @@ class VoiceService:
         generated.replace(cached_audio)
         result.audio_file = output
         result.provider = resolution.selected_provider
-        result.voice_id = config.voice_id
         result.language = config.language
         result.cache_hit = False
         if output.resolve() != cached_audio.resolve():

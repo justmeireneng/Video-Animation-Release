@@ -59,6 +59,8 @@ projects/*/output/preview_v*.mp4
 projects/*/output/final.mp4
 projects/*/output/final_remotion.mp4
 projects/*/project-state.json
+projects/*/voice-control-state.json
+projects/*/output/voice_previews/
 projects/*/imports/
 projects/*/scenes/*/source/*.mp4
 

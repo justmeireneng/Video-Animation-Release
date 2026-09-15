@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 from pathlib import Path
 import importlib.util
+from dataclasses import replace
 
 from ..base import VoiceGenerationRequest, VoiceProvider, VoiceSynthesisResult, wav_metadata
 
@@ -39,14 +40,17 @@ class OmniVoiceProvider(VoiceProvider):
             "synthesis": True,
             "multilingual": True,
             "voice_clone": False,
-            "voice_design": False,
+            "voice_design": True,
+            "voice_design_method": "preset_voice_mapping",
             "reference_audio": False,
             "male": True,
             "female": True,
+            "gender": True,
             "age": False,
             "pitch": True,
             "speed": True,
-            "modes": ["auto"],
+            "speed_range": {"min": 0.85, "max": 1.20, "step": 0.01},
+            "modes": ["auto", "voice_design"],
         }
 
     def list_voices(self) -> list[dict]:
@@ -56,12 +60,24 @@ class OmniVoiceProvider(VoiceProvider):
         ]
 
     def synthesize(self, request: VoiceGenerationRequest) -> VoiceSynthesisResult:
-        output = self.generate_voice(request)
+        effective_request = request
+        options = request.options
+        if options.get("mode") == "voice_design":
+            design = options.get("design") if isinstance(options.get("design"), dict) else {}
+            gender = str(design.get("gender") or "male").lower()
+            voices = {"male": "vi-VN-NamMinhNeural", "female": "vi-VN-HoaiMyNeural"}
+            voice_id = request.voice_id
+            if not voice_id or voice_id == "default":
+                voice_id = voices.get(gender, voices["male"])
+            pitch_values = {"low": "-15Hz", "moderate": "+0Hz", "high": "+15Hz"}
+            pitch = pitch_values.get(str(design.get("pitch") or "moderate").lower(), request.pitch)
+            effective_request = replace(request, voice_id=voice_id, pitch=pitch)
+        output = self.generate_voice(effective_request)
         duration, sample_rate = wav_metadata(output)
         return VoiceSynthesisResult(
             audio_file=output,
             provider=self.provider_id,
-            voice_id=request.voice_id,
+            voice_id=effective_request.voice_id,
             language=request.language,
             duration=duration,
             sample_rate=sample_rate,
