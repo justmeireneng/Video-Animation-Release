@@ -44,6 +44,8 @@ node_modules/
 .remotion/
 remotion-out/
 cache/
+.voice-cache/
+.voice-preview/
 .pnpm-store/
 
 # Output directories & raw test renders (Tracked via releases or cloud storage)

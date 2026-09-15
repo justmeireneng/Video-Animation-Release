@@ -2,8 +2,19 @@
   "project_name": "Atlantic_Ocean_Explainer",
   "title": "Đại Tây Dương - Hệ thống kết nối toàn cầu",
   "language": "vi-VN",
-  "voice": "vi-VN-NamMinhNeural",
-  "rate": "-8%",
+  "voice": {
+    "provider": "omnivoice",
+    "mode": "auto",
+    "voice_id": "vi-VN-NamMinhNeural",
+    "language": "vi-VN",
+    "speed": 0.92,
+    "engine": null,
+    "design": {
+      "gender": "male",
+      "age": null,
+      "pitch": null
+    }
+  },
   "scene_pause_seconds": 0.01,
   "scenes": [
     {

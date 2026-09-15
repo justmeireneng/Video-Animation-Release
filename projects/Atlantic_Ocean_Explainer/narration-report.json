@@ -1,7 +1,8 @@
 {
   "project": "Atlantic_Ocean_Explainer",
-  "voice_provider": "OmniVoiceProvider",
-  "voice_backend": "existing configured fallback when local OmniVoice weights are unavailable",
+  "voice_provider": "omnivoice",
+  "voice_backend": "provider-neutral voice service; OmniVoice remains the default",
+  "voice_warning": null,
   "total_narration_duration": 129.408,
   "total_timeline_duration": 129.7,
   "scenes": [
@@ -9,85 +10,225 @@
       "scene_id": "scene_01",
       "narration_duration": 11.016,
       "timeline_duration": 11.033,
-      "subtitle_phrases": 8
+      "subtitle_phrases": 8,
+      "voice": {
+        "audio_file": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\audio\\scene_01.wav",
+        "provider": "omnivoice",
+        "voice_id": "vi-VN-NamMinhNeural",
+        "language": "vi-VN",
+        "duration": 11.016,
+        "sample_rate": 48000,
+        "timing": null,
+        "cache_hit": true
+      }
     },
     {
       "scene_id": "scene_02",
       "narration_duration": 8.64,
       "timeline_duration": 8.667,
-      "subtitle_phrases": 7
+      "subtitle_phrases": 7,
+      "voice": {
+        "audio_file": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\audio\\scene_02.wav",
+        "provider": "omnivoice",
+        "voice_id": "vi-VN-NamMinhNeural",
+        "language": "vi-VN",
+        "duration": 8.64,
+        "sample_rate": 48000,
+        "timing": null,
+        "cache_hit": true
+      }
     },
     {
       "scene_id": "scene_03",
       "narration_duration": 6.72,
       "timeline_duration": 6.733,
-      "subtitle_phrases": 4
+      "subtitle_phrases": 4,
+      "voice": {
+        "audio_file": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\audio\\scene_03.wav",
+        "provider": "omnivoice",
+        "voice_id": "vi-VN-NamMinhNeural",
+        "language": "vi-VN",
+        "duration": 6.72,
+        "sample_rate": 48000,
+        "timing": null,
+        "cache_hit": true
+      }
     },
     {
       "scene_id": "scene_04",
       "narration_duration": 9.72,
       "timeline_duration": 9.733,
-      "subtitle_phrases": 6
+      "subtitle_phrases": 6,
+      "voice": {
+        "audio_file": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\audio\\scene_04.wav",
+        "provider": "omnivoice",
+        "voice_id": "vi-VN-NamMinhNeural",
+        "language": "vi-VN",
+        "duration": 9.72,
+        "sample_rate": 48000,
+        "timing": null,
+        "cache_hit": true
+      }
     },
     {
       "scene_id": "scene_05",
       "narration_duration": 10.392,
       "timeline_duration": 10.433,
-      "subtitle_phrases": 7
+      "subtitle_phrases": 7,
+      "voice": {
+        "audio_file": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\audio\\scene_05.wav",
+        "provider": "omnivoice",
+        "voice_id": "vi-VN-NamMinhNeural",
+        "language": "vi-VN",
+        "duration": 10.392,
+        "sample_rate": 48000,
+        "timing": null,
+        "cache_hit": true
+      }
     },
     {
       "scene_id": "scene_06",
       "narration_duration": 9.648,
       "timeline_duration": 9.667,
-      "subtitle_phrases": 6
+      "subtitle_phrases": 6,
+      "voice": {
+        "audio_file": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\audio\\scene_06.wav",
+        "provider": "omnivoice",
+        "voice_id": "vi-VN-NamMinhNeural",
+        "language": "vi-VN",
+        "duration": 9.648,
+        "sample_rate": 48000,
+        "timing": null,
+        "cache_hit": true
+      }
     },
     {
       "scene_id": "scene_07",
       "narration_duration": 9.816,
       "timeline_duration": 9.833,
-      "subtitle_phrases": 8
+      "subtitle_phrases": 8,
+      "voice": {
+        "audio_file": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\audio\\scene_07.wav",
+        "provider": "omnivoice",
+        "voice_id": "vi-VN-NamMinhNeural",
+        "language": "vi-VN",
+        "duration": 9.816,
+        "sample_rate": 48000,
+        "timing": null,
+        "cache_hit": true
+      }
     },
     {
       "scene_id": "scene_08",
       "narration_duration": 9.168,
       "timeline_duration": 9.2,
-      "subtitle_phrases": 6
+      "subtitle_phrases": 6,
+      "voice": {
+        "audio_file": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\audio\\scene_08.wav",
+        "provider": "omnivoice",
+        "voice_id": "vi-VN-NamMinhNeural",
+        "language": "vi-VN",
+        "duration": 9.168,
+        "sample_rate": 48000,
+        "timing": null,
+        "cache_hit": true
+      }
     },
     {
       "scene_id": "scene_09",
       "narration_duration": 9.648,
       "timeline_duration": 9.667,
-      "subtitle_phrases": 7
+      "subtitle_phrases": 7,
+      "voice": {
+        "audio_file": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\audio\\scene_09.wav",
+        "provider": "omnivoice",
+        "voice_id": "vi-VN-NamMinhNeural",
+        "language": "vi-VN",
+        "duration": 9.648,
+        "sample_rate": 48000,
+        "timing": null,
+        "cache_hit": true
+      }
     },
     {
       "scene_id": "scene_10",
       "narration_duration": 9.144,
       "timeline_duration": 9.167,
-      "subtitle_phrases": 5
+      "subtitle_phrases": 5,
+      "voice": {
+        "audio_file": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\audio\\scene_10.wav",
+        "provider": "omnivoice",
+        "voice_id": "vi-VN-NamMinhNeural",
+        "language": "vi-VN",
+        "duration": 9.144,
+        "sample_rate": 48000,
+        "timing": null,
+        "cache_hit": true
+      }
     },
     {
       "scene_id": "scene_11",
       "narration_duration": 8.088,
       "timeline_duration": 8.1,
-      "subtitle_phrases": 6
+      "subtitle_phrases": 6,
+      "voice": {
+        "audio_file": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\audio\\scene_11.wav",
+        "provider": "omnivoice",
+        "voice_id": "vi-VN-NamMinhNeural",
+        "language": "vi-VN",
+        "duration": 8.088,
+        "sample_rate": 48000,
+        "timing": null,
+        "cache_hit": true
+      }
     },
     {
       "scene_id": "scene_12",
       "narration_duration": 7.656,
       "timeline_duration": 7.667,
-      "subtitle_phrases": 6
+      "subtitle_phrases": 6,
+      "voice": {
+        "audio_file": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\audio\\scene_12.wav",
+        "provider": "omnivoice",
+        "voice_id": "vi-VN-NamMinhNeural",
+        "language": "vi-VN",
+        "duration": 7.656,
+        "sample_rate": 48000,
+        "timing": null,
+        "cache_hit": true
+      }
     },
     {
       "scene_id": "scene_13",
       "narration_duration": 11.136,
       "timeline_duration": 11.167,
-      "subtitle_phrases": 8
+      "subtitle_phrases": 8,
+      "voice": {
+        "audio_file": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\audio\\scene_13.wav",
+        "provider": "omnivoice",
+        "voice_id": "vi-VN-NamMinhNeural",
+        "language": "vi-VN",
+        "duration": 11.136,
+        "sample_rate": 48000,
+        "timing": null,
+        "cache_hit": true
+      }
     },
     {
       "scene_id": "scene_14",
       "narration_duration": 8.616,
       "timeline_duration": 8.633,
-      "subtitle_phrases": 7
+      "subtitle_phrases": 7,
+      "voice": {
+        "audio_file": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\audio\\scene_14.wav",
+        "provider": "omnivoice",
+        "voice_id": "vi-VN-NamMinhNeural",
+        "language": "vi-VN",
+        "duration": 8.616,
+        "sample_rate": 48000,
+        "timing": null,
+        "cache_hit": true
+      }
     }
   ],
   "remotion_path": "D:\\Video Animation Release\\projects\\Atlantic_Ocean_Explainer\\remotion.json"

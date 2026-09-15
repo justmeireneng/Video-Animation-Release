@@ -17,6 +17,8 @@ from src.services.import_service import ImportService
 from src.services.project_state import ProjectStateService
 from src.services.render_service import RenderService
 from src.services.narration_timeline import NarrationTimelineService
+from src.services.voice_service import VoiceConfig, VoiceService
+from src.providers.voice.registry import ProviderRegistry
 
 if hasattr(sys.stdout, "reconfigure"):
     sys.stdout.reconfigure(encoding="utf-8")
@@ -246,6 +248,16 @@ def main():
     narration.add_argument("project_name")
     narration.add_argument("--reuse-audio", action="store_true")
 
+    subparsers.add_parser("voice-providers", help="Show lazy provider/voice/engine data for the future UI")
+
+    voice_preview = subparsers.add_parser("voice-preview", help="Generate a short voice preview without video")
+    voice_preview.add_argument("project_name")
+    voice_preview.add_argument("--provider", choices=["omnivoice", "voicestudio"])
+    voice_preview.add_argument("--engine")
+    voice_preview.add_argument("--voice-id")
+    voice_preview.add_argument("--text")
+    voice_preview.add_argument("--out")
+
     project_status = subparsers.add_parser("project-status", help="Show ZIP-first project workflow state")
     project_status.add_argument("project_name")
 
@@ -299,6 +311,32 @@ def main():
         print(f"Preview render: {RenderService(ROOT_DIR, args.project_name).render_preview()}")
     elif args.command == "prepare-narration":
         _print_video_record(NarrationTimelineService(ROOT_DIR, args.project_name).prepare(synthesize=not args.reuse_audio))
+    elif args.command == "voice-providers":
+        _print_video_record({
+            "default_voice_provider": "omnivoice",
+            "providers": ProviderRegistry().catalog(),
+        })
+    elif args.command == "voice-preview":
+        project_root = ROOT_DIR / "projects" / args.project_name
+        source_path = project_root / "narration.json"
+        if not source_path.is_file():
+            print(f"Error: Narration source not found: {source_path}")
+            sys.exit(1)
+        voice_config = VoiceConfig.from_project(json.loads(source_path.read_text(encoding="utf-8")))
+        if args.provider:
+            voice_config.provider = args.provider
+        if args.engine:
+            voice_config.engine = args.engine
+        if args.voice_id:
+            voice_config.voice_id = args.voice_id
+        voice_service = VoiceService(project_root)
+        if args.text:
+            result = voice_service.generate_voice_preview(voice_config, args.text, args.out)
+        else:
+            result = voice_service.generate_voice_preview(voice_config, output_path=args.out)
+        preview_report = result.to_dict()
+        preview_report["warning"] = voice_service.last_warning
+        _print_video_record(preview_report)
     elif args.command == "project-status":
         _print_video_record(ProjectStateService(ROOT_DIR / "projects" / args.project_name).get())
     elif args.command == "approve-project":

@@ -1,12 +1,16 @@
 #!/usr/bin/env python3
 from pathlib import Path
-from ..base import VoiceProvider, VoiceGenerationRequest
+from ..base import VoiceGenerationRequest, VoiceProvider, VoiceSynthesisResult, wav_metadata
 import edge_tts
 import asyncio
+import importlib.util
 import shutil
 import subprocess
 
 class EdgeTTSVoiceProvider(VoiceProvider):
+    provider_id = "edge_tts"
+    display_name = "Edge TTS"
+
     def __init__(self, default_voice: str = "vi-VN-NamMinhNeural"):
         self.default_voice = default_voice
 
@@ -35,3 +39,36 @@ class EdgeTTSVoiceProvider(VoiceProvider):
         if tmp_mp3.exists():
             tmp_mp3.unlink()
         return out_f
+
+    def is_available(self) -> bool:
+        return importlib.util.find_spec("edge_tts") is not None
+
+    def health_check(self) -> dict:
+        return {"available": self.is_available(), "backend": "edge_tts"}
+
+    def capabilities(self) -> dict:
+        return {
+            "synthesis": True,
+            "multilingual": True,
+            "voice_clone": False,
+            "voice_design": False,
+            "reference_audio": False,
+            "pitch": True,
+            "speed": True,
+        }
+
+    def list_voices(self) -> list[dict]:
+        return [{"voice_id": self.default_voice, "name": self.default_voice, "language": "vi-VN"}]
+
+    def synthesize(self, request: VoiceGenerationRequest) -> VoiceSynthesisResult:
+        output = self.generate_voice(request)
+        duration, sample_rate = wav_metadata(output)
+        voice_id = request.voice_id if request.voice_id != "default" else self.default_voice
+        return VoiceSynthesisResult(
+            audio_file=output,
+            provider=self.provider_id,
+            voice_id=voice_id,
+            language=request.language,
+            duration=duration,
+            sample_rate=sample_rate,
+        )

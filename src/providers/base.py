@@ -8,6 +8,7 @@ from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
+import wave
 
 @dataclass
 class ImageGenerationRequest:
@@ -69,11 +70,77 @@ class VoiceGenerationRequest:
     pitch: str = "+0Hz"
     output_path: Path | str = "narration.wav"
     ref_audio: Path | str | None = None
+    options: dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class VoiceSynthesisResult:
+    """Provider-neutral voice result consumed by narration and future UI code."""
+
+    audio_file: Path | str
+    provider: str
+    voice_id: str
+    language: str
+    duration: float = 0.0
+    sample_rate: int = 0
+    timing: list[dict[str, Any]] | None = None
+    engine: str | None = None
+    cache_hit: bool = False
+
+    def to_dict(self) -> dict[str, Any]:
+        return {
+            "audio_file": str(self.audio_file),
+            "provider": self.provider,
+            "voice_id": self.voice_id,
+            "language": self.language,
+            "duration": self.duration,
+            "sample_rate": self.sample_rate,
+            "timing": self.timing,
+            "engine": self.engine,
+            "cache_hit": self.cache_hit,
+        }
+
+
+def wav_metadata(path: Path | str) -> tuple[float, int]:
+    """Read duration/sample rate without adding an audio dependency."""
+
+    try:
+        with wave.open(str(path), "rb") as audio:
+            sample_rate = audio.getframerate()
+            duration = audio.getnframes() / sample_rate if sample_rate else 0.0
+            return duration, sample_rate
+    except (OSError, EOFError, wave.Error):
+        return 0.0, 0
 
 class VoiceProvider(ABC):
+    provider_id = "unknown"
+    display_name = "Unknown voice provider"
+
     @abstractmethod
-    def generate_voice(self, request: VoiceGenerationRequest) -> Path:
+    def is_available(self) -> bool:
         pass
+
+    @abstractmethod
+    def health_check(self) -> dict[str, Any]:
+        pass
+
+    @abstractmethod
+    def capabilities(self) -> dict[str, Any]:
+        pass
+
+    @abstractmethod
+    def list_voices(self) -> list[dict[str, Any]]:
+        pass
+
+    @abstractmethod
+    def synthesize(self, request: VoiceGenerationRequest) -> VoiceSynthesisResult:
+        pass
+
+    def generate_voice(self, request: VoiceGenerationRequest) -> Path:
+        return Path(self.synthesize(request).audio_file)
+
+    def generate_preview(self, request: VoiceGenerationRequest) -> VoiceSynthesisResult:
+        return self.synthesize(request)
 
 @dataclass
 class CompositionRequest:

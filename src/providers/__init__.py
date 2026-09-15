@@ -1,3 +1,14 @@
-from .base import CompositorProvider, ImageProvider, SceneVideoProvider, VideoProvider, VoiceProvider
+from .base import (
+    CompositorProvider,
+    ImageProvider,
+    SceneVideoProvider,
+    VideoProvider,
+    VoiceGenerationRequest,
+    VoiceProvider,
+    VoiceSynthesisResult,
+)
 
-__all__ = ["CompositorProvider", "ImageProvider", "SceneVideoProvider", "VideoProvider", "VoiceProvider"]
+__all__ = [
+    "CompositorProvider", "ImageProvider", "SceneVideoProvider", "VideoProvider",
+    "VoiceGenerationRequest", "VoiceProvider", "VoiceSynthesisResult",
+]

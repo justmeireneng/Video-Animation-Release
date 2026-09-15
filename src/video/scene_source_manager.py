@@ -273,6 +273,15 @@ class SceneVideoStore:
     def _sync_remotion(self, scene_id: str, metadata: dict[str, Any]) -> None:
         project = self._project()
         scene = next(item for item in project["scenes"] if item["id"] == scene_id)
+        self._apply_metadata_to_scene(scene, metadata)
+        project.setdefault("sourceVideoSettings", {
+            "auto_approve_latest": False,
+            "source_audio_default": {"mode": "background", "volume": 0.30, "duck_under_narration": True},
+        })
+        _write_json(self.remotion_path, project)
+
+    @staticmethod
+    def _apply_metadata_to_scene(scene: dict[str, Any], metadata: dict[str, Any]) -> None:
         scene["videoSources"] = [
             {
                 "src": item["source_video"], "provider": item["source_provider"],
@@ -286,6 +295,16 @@ class SceneVideoStore:
             for item in metadata["versions"] if item["status"] != "invalid"
         ]
         scene["currentVideoVersion"] = metadata.get("active_version")
+
+    def sync_all_to_remotion(self) -> None:
+        """Restore source-video projections without touching narration or visual edits."""
+
+        project = self._project()
+        scenes = {str(item.get("id")): item for item in project.get("scenes", [])}
+        for scene_id, scene in scenes.items():
+            metadata_path = self.metadata_path(scene_id)
+            if metadata_path.is_file():
+                self._apply_metadata_to_scene(scene, _read_json(metadata_path))
         project.setdefault("sourceVideoSettings", {
             "auto_approve_latest": False,
             "source_audio_default": {"mode": "background", "volume": 0.30, "duck_under_narration": True},
