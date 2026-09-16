@@ -78,17 +78,6 @@ class DesignProvider(VoiceProvider):
         return VoiceSynthesisResult(output, self.provider_id, voice_id, request.language, duration, sample_rate)
 
 
-class UnavailableProvider(DesignProvider):
-    provider_id = "voicestudio_remote"
-    display_name = "VoiceStudio Remote"
-
-    def is_available(self):
-        return False
-
-    def health_check(self):
-        return {"available": False, "status": "not_installed_or_not_running"}
-
-
 class TestVoiceControl(unittest.TestCase):
     def make_control(self, root: Path):
         project = root / "projects" / "demo"
@@ -101,7 +90,7 @@ class TestVoiceControl(unittest.TestCase):
             "scenes": [{"id": "scene_01", "narration": "Xin chào"}],
         }), encoding="utf-8")
         design = DesignProvider()
-        registry = ProviderRegistry({"omnivoice": lambda: design, "voicestudio_remote": UnavailableProvider})
+        registry = ProviderRegistry({"omnivoice": lambda: design})
         return VoiceControlService(project, registry=registry), design
 
     def test_ui_contract_hides_unsupported_age_and_clone_and_has_audio_player(self):
@@ -109,15 +98,18 @@ class TestVoiceControl(unittest.TestCase):
             control, _ = self.make_control(Path(tmp))
             control.update_state(mode="voice_design")
             contract = control.ui_contract()
+            self.assertEqual([provider["provider_id"] for provider in contract["providers"]], ["omnivoice"])
             self.assertTrue(contract["controls"]["gender"]["visible"])
             self.assertFalse(contract["controls"]["age"]["visible"])
             self.assertNotIn("voice_clone", contract["controls"]["mode"]["options"])
             page = voice_control_page(control)
-            self.assertIn("VoiceStudio Remote — Configure Remote", page)
+            self.assertIn("VOICE ENGINE", page)
+            self.assertIn("1.10 Default", page)
+            self.assertNotIn('name="provider"', page)
+            self.assertNotIn("VoiceStudio", page)
+            self.assertNotIn("Clone reference audio", page)
             self.assertIn('<audio id="active-preview" controls', page)
             self.assertIn("Generate 4 comparisons", page)
-            self.assertIn("Server URL", page)
-            self.assertIn("Test Connection", page)
 
     def test_voice_form_decodes_vietnamese_as_utf8(self):
         expected = VOICE_PREVIEW_TEXT
@@ -138,6 +130,8 @@ class TestVoiceControl(unittest.TestCase):
                     provider="omnivoice", mode="voice_design", speed=1.0,
                     design={"gender": "male", "age": "young adult", "pitch": "moderate"},
                 ))
+            with self.assertRaisesRegex(VoiceControlError, "Only OmniVoice"):
+                control.update_state(provider="future-provider")
 
     def test_four_previews_and_selection_update_config_without_video_render(self):
         with tempfile.TemporaryDirectory() as tmp:

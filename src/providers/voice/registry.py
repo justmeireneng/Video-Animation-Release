@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Lazy voice-provider registry and future UI data contract."""
+"""Lazy registry for voice providers that are active in this build."""
 from __future__ import annotations
 
 from dataclasses import dataclass
@@ -29,9 +29,6 @@ class ProviderRegistry:
     def __init__(self, factories: dict[str, Callable[[], VoiceProvider]] | None = None):
         self._factories = factories or {
             "omnivoice": _lazy("src.providers.voice.omnivoice", "OmniVoiceProvider"),
-            "voicestudio_remote": _lazy(
-                "src.providers.voice.voicestudio_remote", "RemoteVoiceStudioProvider"
-            ),
         }
         self._active_id: str | None = None
         self._active: VoiceProvider | None = None
@@ -60,6 +57,8 @@ class ProviderRegistry:
             warning = f"Unknown voice provider '{requested}'; using '{DEFAULT_VOICE_PROVIDER}'."
             return ProviderResolution(self.get(DEFAULT_VOICE_PROVIDER), requested, DEFAULT_VOICE_PROVIDER, warning)
         provider = self.get(requested)
+        # Configuration remains part of the abstraction for a future provider,
+        # but the production registry intentionally activates OmniVoice only.
         configure = getattr(provider, "configure", None)
         if configuration and callable(configure):
             configure(**configuration)

@@ -6,17 +6,11 @@
     "provider": "omnivoice",
     "mode": "voice_design",
     "language": "vi",
-    "voice_id": "vi-VN-NamMinhNeural",
     "design": {
       "gender": "male",
       "pitch": "moderate"
     },
-    "speed": 1.12,
-    "engine": null,
-    "reference_audio": null,
-    "selected_preview": "male_1.12",
-    "approval_required": true,
-    "approved": false
+    "speed": 1.1
   },
   "scene_pause_seconds": 0.01,
   "scenes": [

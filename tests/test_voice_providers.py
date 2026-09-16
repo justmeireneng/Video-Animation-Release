@@ -3,14 +3,12 @@ from __future__ import annotations
 
 import io
 import json
-import os
 import sys
 import tempfile
 import unittest
 import wave
 from pathlib import Path
 from unittest.mock import patch
-from urllib.parse import urlsplit
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
@@ -18,7 +16,6 @@ sys.path.insert(0, str(ROOT))
 from src.providers.base import VoiceGenerationRequest, VoiceProvider, VoiceSynthesisResult, wav_metadata
 from src.providers.voice.omnivoice import OmniVoiceProvider
 from src.providers.voice.registry import ProviderRegistry
-from src.providers.voice.voicestudio_remote import RemoteVoiceStudioProvider
 from src.services.narration_timeline import NarrationTimelineService
 from src.services.voice_service import VoiceBatchItem, VoiceConfig, VoiceJobStatus, VoiceService
 
@@ -61,54 +58,6 @@ class FakeProvider(VoiceProvider):
         return VoiceSynthesisResult(output, self.provider_id, request.voice_id, request.language, duration, sample_rate)
 
 
-class UnavailableProvider(FakeProvider):
-    provider_id = "voicestudio_remote"
-
-    def is_available(self):
-        return False
-
-    def health_check(self):
-        return {"available": False, "status": "not_installed_or_not_running"}
-
-
-class FakeRemoteResponse:
-    def __init__(self, body: bytes, headers: dict[str, str] | None = None):
-        self.body = body
-        self.headers = headers or {}
-
-    def read(self) -> bytes:
-        return self.body
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *_args):
-        return False
-
-
-class FakeRemoteEndpoint:
-    """In-memory VoiceStudio protocol fixture; it never binds a localhost port."""
-
-    def __init__(self):
-        self.requests = []
-        self.last_speech_payload = None
-
-    def __call__(self, request, timeout):
-        self.requests.append((request, timeout))
-        path = urlsplit(request.full_url).path
-        if path == "/health":
-            return FakeRemoteResponse(json.dumps({"status": "ok", "version": "test"}).encode("utf-8"))
-        if path == "/v1/audio/voices":
-            return FakeRemoteResponse(json.dumps({
-                "voices": [{"voice_id": "profile-vi", "name": "Vietnamese profile", "language": "vi"}],
-                "engines": [{"id": "runtime-engine", "available": True}],
-            }).encode("utf-8"))
-        if path == "/v1/audio/speech":
-            self.last_speech_payload = json.loads(request.data.decode("utf-8"))
-            return FakeRemoteResponse(wav_bytes(), {"X-VoiceStudio-Synthesis-Seconds": "0.321"})
-        raise AssertionError(f"Unexpected remote path: {path}")
-
-
 class TestVoiceProviders(unittest.TestCase):
 
     def test_omnivoice_keeps_existing_edge_fallback(self):
@@ -118,73 +67,19 @@ class TestVoiceProviders(unittest.TestCase):
         self.assertEqual(result, Path("expected.wav"))
         generate.assert_called_once_with(request)
 
-    def test_voicestudio_remote_requires_non_loopback_url(self):
-        opener = FakeRemoteEndpoint()
-        with patch.dict(os.environ, {}, clear=True):
-            provider = RemoteVoiceStudioProvider(opener=opener)
-        self.assertFalse(provider.is_available())
-        self.assertEqual(provider.health_check()["status"], "remote_url_required_or_rejected")
-        self.assertEqual(provider.list_voices(), [])
-        self.assertEqual(opener.requests, [])
-        loopback = RemoteVoiceStudioProvider(base_url="http://127.0.0.1:3900", opener=opener)
-        self.assertFalse(loopback.is_available())
-        self.assertIn("rejects localhost", loopback.health_check()["detail"])
+    def test_default_registry_exposes_only_omnivoice(self):
+        providers = ProviderRegistry().catalog()
+        self.assertEqual([item["provider_id"] for item in providers], ["omnivoice"])
 
-    def test_voicestudio_remote_health_discovery_and_vietnamese_synthesis(self):
-        endpoint = FakeRemoteEndpoint()
-        provider = RemoteVoiceStudioProvider(
-            base_url="https://voice.example.test", api_key="secret-for-test", timeout_seconds=12, opener=endpoint,
-        )
-        self.assertTrue(provider.health_check()["available"])
-        self.assertEqual(provider.list_voices()[0]["voice_id"], "profile-vi")
-        self.assertEqual(provider.list_engines()[0]["id"], "runtime-engine")
-        self.assertEqual(provider.test_connection()["status"], "ready")
-        with tempfile.TemporaryDirectory() as tmp:
-            output = Path(tmp) / "speech.wav"
-            result = provider.synthesize(VoiceGenerationRequest(
-                text="Xin chào Việt Nam",
-                language="vi",
-                voice_id="profile-vi",
-                output_path=output,
-                options={"engine": "runtime-engine", "speed": 1.1},
-            ))
-            self.assertEqual(result.audio_file, output)
-            self.assertEqual(result.sample_rate, 16000)
-            self.assertGreater(result.duration, 0)
-            self.assertEqual(endpoint.last_speech_payload["language"], "vi")
-            self.assertEqual(endpoint.last_speech_payload["model"], "runtime-engine")
-            self.assertEqual(endpoint.requests[-1][0].get_header("Authorization"), "Bearer secret-for-test")
-            self.assertEqual(provider.last_metrics["remote_synthesis_seconds"], 0.321)
-            self.assertEqual(provider.last_metrics["output_bytes"], len(wav_bytes()))
-
-    def test_project_config_switch_and_legacy_config(self):
-        switched = VoiceConfig.from_project({
-            "voice": {
-                "provider": "voicestudio_remote", "voice_id": "profile", "language": "vi", "speed": 1.1,
-                "base_url": "https://voice.example.test", "timeout_seconds": 180, "api_key": "must-not-persist",
-            }
-        })
-        self.assertEqual(switched.provider, "voicestudio_remote")
-        self.assertEqual(switched.voice_id, "profile")
-        self.assertEqual(switched.base_url, "https://voice.example.test")
-        self.assertIsNone(switched.api_key)
-        self.assertNotIn("api_key", switched.to_dict())
+    def test_voice_config_defaults_to_omnivoice_design_and_legacy_rate(self):
+        default = VoiceConfig()
+        self.assertEqual(default.provider, "omnivoice")
+        self.assertEqual(default.mode, "voice_design")
+        self.assertEqual(default.design, {"gender": "male", "pitch": "moderate"})
+        self.assertEqual(default.speed, 1.10)
         legacy = VoiceConfig.from_project({"voice": "vi-VN-NamMinhNeural", "language": "vi-VN", "rate": "-8%"})
         self.assertEqual(legacy.provider, "omnivoice")
         self.assertAlmostEqual(legacy.speed, 0.92)
-
-    def test_remote_cache_key_isolated_by_endpoint_and_excludes_api_key(self):
-        service = VoiceService(Path(tempfile.gettempdir()), fallback=False)
-        first = VoiceConfig(
-            provider="voicestudio_remote", base_url="https://voice-a.example.test", api_key="first-secret",
-            engine="tts-1", voice_id="profile", language="vi", speed=1.12,
-        )
-        second = VoiceConfig(
-            provider="voicestudio_remote", base_url="https://voice-b.example.test", api_key="second-secret",
-            engine="tts-1", voice_id="profile", language="vi", speed=1.12,
-        )
-        self.assertNotEqual(service.cache_key("Nội dung", first), service.cache_key("Nội dung", second))
-        self.assertNotIn("secret", json.dumps(first.to_dict()))
 
     def test_cache_and_preview_do_not_need_video(self):
         fake = FakeProvider()
@@ -202,17 +97,37 @@ class TestVoiceProviders(unittest.TestCase):
             self.assertTrue(Path(preview.audio_file).is_file())
             self.assertFalse((root / "output" / "preview.mp4").exists())
 
+    def test_omnivoice_cache_key_tracks_active_voice_inputs(self):
+        service = VoiceService(Path(tempfile.gettempdir()), fallback=False)
+        base = VoiceConfig(
+            provider="omnivoice", mode="voice_design", language="vi", speed=1.10,
+            design={"gender": "male", "pitch": "moderate"},
+        )
+        self.assertEqual(service.cache_key("Nội dung", base), service.cache_key("Nội dung", base))
+        variants = [
+            VoiceConfig(provider="omnivoice", mode="auto", language="vi", speed=1.10),
+            VoiceConfig(provider="omnivoice", mode="voice_design", language="vi", speed=1.10,
+                        design={"gender": "female", "pitch": "moderate"}),
+            VoiceConfig(provider="omnivoice", mode="voice_design", language="vi", speed=1.10,
+                        design={"gender": "male", "pitch": "low"}),
+            VoiceConfig(provider="omnivoice", mode="voice_design", language="vi", speed=1.12,
+                        design={"gender": "male", "pitch": "moderate"}),
+        ]
+        for variant in variants:
+            self.assertNotEqual(service.cache_key("Nội dung", base), service.cache_key("Nội dung", variant))
+        self.assertNotEqual(service.cache_key("Nội dung", base), service.cache_key("Nội dung khác", base))
+
     def test_invalid_provider_falls_back_with_clear_warning(self):
         registry = ProviderRegistry({"omnivoice": FakeProvider})
         resolution = registry.resolve("typo-provider")
         self.assertEqual(resolution.selected_provider, "omnivoice")
         self.assertIn("Unknown voice provider", resolution.warning)
 
-    def test_unavailable_optional_provider_falls_back_without_breaking_project(self):
-        registry = ProviderRegistry({"omnivoice": FakeProvider, "voicestudio_remote": UnavailableProvider})
-        resolution = registry.resolve("voicestudio_remote")
+    def test_inactive_provider_name_falls_back_without_loading_an_extra_provider(self):
+        registry = ProviderRegistry({"omnivoice": FakeProvider})
+        resolution = registry.resolve("inactive-provider")
         self.assertEqual(resolution.selected_provider, "omnivoice")
-        self.assertIn("unavailable", resolution.warning)
+        self.assertIn("Unknown voice provider", resolution.warning)
 
     def test_batch_reports_scene_job_states(self):
         fake = FakeProvider()
@@ -236,7 +151,9 @@ class TestVoiceProviders(unittest.TestCase):
         source = json.loads((ROOT / "projects" / "Atlantic_Ocean_Explainer" / "narration.json").read_text(encoding="utf-8"))
         config = VoiceConfig.from_project(source)
         self.assertEqual(config.provider, "omnivoice")
-        self.assertEqual(config.voice_id, "vi-VN-NamMinhNeural")
+        self.assertEqual(config.mode, "voice_design")
+        self.assertEqual(config.design, {"gender": "male", "pitch": "moderate"})
+        self.assertEqual(config.speed, 1.10)
         self.assertTrue((ROOT / "projects" / "Atlantic_Ocean_Explainer" / "remotion.json").is_file())
 
     def test_narration_refresh_preserves_existing_visual_and_video_source_fields(self):

@@ -19,7 +19,7 @@ from src.services.render_service import RenderService
 from src.services.narration_timeline import NarrationTimelineService
 from src.services.voice_service import VoiceConfig, VoiceService
 from src.services.voice_control import VoiceControlService
-from src.providers.voice.registry import ProviderRegistry
+from src.providers.voice.registry import DEFAULT_VOICE_PROVIDER, ProviderRegistry
 from src.review.voice_control_review import serve_voice_control
 
 if hasattr(sys.stdout, "reconfigure"):
@@ -254,11 +254,7 @@ def main():
 
     voice_preview = subparsers.add_parser("voice-preview", help="Generate a short voice preview without video")
     voice_preview.add_argument("project_name")
-    voice_preview.add_argument("--provider", choices=["omnivoice", "voicestudio_remote"])
-    voice_preview.add_argument("--engine")
     voice_preview.add_argument("--voice-id")
-    voice_preview.add_argument("--remote-base-url", help="Remote VoiceStudio HTTPS/HTTP URL; localhost is rejected")
-    voice_preview.add_argument("--timeout-seconds", type=float, help="Remote request timeout; default is 180 seconds")
     voice_preview.add_argument("--text")
     voice_preview.add_argument("--out")
 
@@ -345,16 +341,11 @@ def main():
             print(f"Error: Narration source not found: {source_path}")
             sys.exit(1)
         voice_config = VoiceConfig.from_project(json.loads(source_path.read_text(encoding="utf-8")))
-        if args.provider:
-            voice_config.provider = args.provider
-        if args.engine:
-            voice_config.engine = args.engine
+        # VoiceStudio is intentionally outside the current production scope.
+        # A legacy project config is normalized before any provider is resolved.
+        voice_config.provider = DEFAULT_VOICE_PROVIDER
         if args.voice_id:
             voice_config.voice_id = args.voice_id
-        if args.remote_base_url:
-            voice_config.base_url = args.remote_base_url
-        if args.timeout_seconds is not None:
-            voice_config.timeout_seconds = args.timeout_seconds
         voice_service = VoiceService(project_root)
         if args.text:
             result = voice_service.generate_voice_preview(voice_config, args.text, args.out)
