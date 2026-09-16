@@ -135,7 +135,7 @@ class SceneVideoStore:
             raise FileNotFoundError(source)
         metadata = self.load_metadata(scene_id)
         version = SourceVersionManager.next_version(metadata)
-        relative = SourceVersionManager.relative_path(scene_id, version, prefix="flow")
+        relative = SourceVersionManager.relative_path(scene_id, version, prefix="flow", suffix=source.suffix)
         destination = self.project_root / relative
         destination.parent.mkdir(parents=True, exist_ok=True)
         if destination.exists():
@@ -153,7 +153,7 @@ class SceneVideoStore:
         source_audio = AudioPolicyService.defaults(bool(media.get("has_audio")), self._settings().get("source_audio_default"))
         record = {
             "scene_id": scene_id, "source_provider": provider, "source_filename": source_filename or source.name,
-            "source_video": relative.as_posix(), "version": version, "probe": media, "status": status,
+            "source_video": relative.as_posix(), "source_extension": source.suffix.lower(), "version": version, "probe": media, "status": status,
             "trim": {"start": 0.0, "end": trim_end}, "crop": {"mode": "cover", "x": 0.5, "y": 0.5},
             "source_audio": source_audio, "timing": timing, "created_at": _utc_now(),
         }
@@ -204,7 +204,17 @@ class SceneVideoStore:
         if start < 0 or end <= start or end > duration + 0.05:
             raise ValueError(f"Invalid trim {start}-{end}; clip duration is {duration}s.")
         record["trim"] = {"start": round(start, 3), "end": round(end, 3)}
-        record["timing"] = _timing_policy(end - start, float(self._scene(scene_id)["durationInFrames"]) / self._fps())
+        previous_timing = dict(record.get("timing") or {})
+        timing = _timing_policy(end - start, float(self._scene(scene_id)["durationInFrames"]) / self._fps())
+        # A creator-set speed/hold choice must survive later trim edits.  The
+        # automatic policy only supplies defaults for unedited clips.
+        if previous_timing.get("manual_playback_rate"):
+            timing["playback_rate"] = previous_timing["playback_rate"]
+            timing["manual_playback_rate"] = True
+        if previous_timing.get("manual_hold_last_frame"):
+            timing["hold_last_frame"] = previous_timing["hold_last_frame"]
+            timing["manual_hold_last_frame"] = True
+        record["timing"] = timing
         self._select(metadata, record)
         _write_json(self.metadata_path(scene_id), metadata)
         self._sync_remotion(scene_id, metadata)
@@ -234,8 +244,38 @@ class SceneVideoStore:
         self._sync_remotion(scene_id, metadata)
         return record
 
+    def set_playback_speed(self, scene_id: str, version: int, speed: float) -> dict[str, Any]:
+        """Set a non-destructive source-video speed in the supported 0.5–2x range."""
+
+        if not 0.5 <= speed <= 2.0:
+            raise ValueError("Playback speed must be between 0.50x and 2.00x.")
+        metadata = self.load_metadata(scene_id)
+        record = self._version(metadata, version)
+        timing = dict(record.get("timing") or {})
+        timing["playback_rate"] = round(float(speed), 3)
+        timing["manual_playback_rate"] = True
+        record["timing"] = timing
+        self._select(metadata, record)
+        _write_json(self.metadata_path(scene_id), metadata)
+        self._sync_remotion(scene_id, metadata)
+        return record
+
+    def set_hold_last_frame(self, scene_id: str, version: int, enabled: bool) -> dict[str, Any]:
+        """Explicitly hold, or stop holding, the final source-video frame."""
+
+        metadata = self.load_metadata(scene_id)
+        record = self._version(metadata, version)
+        timing = dict(record.get("timing") or {})
+        timing["hold_last_frame"] = bool(enabled)
+        timing["manual_hold_last_frame"] = True
+        record["timing"] = timing
+        self._select(metadata, record)
+        _write_json(self.metadata_path(scene_id), metadata)
+        self._sync_remotion(scene_id, metadata)
+        return record
+
     def set_transition(self, scene_id: str, transition: str) -> dict[str, Any]:
-        if transition not in {"crossfade", "soft_slide", "wipe_reveal", "paper", "none"}:
+        if transition not in {"crossfade", "soft_slide", "wipe_reveal", "zoom_dissolve", "paper", "none"}:
             raise ValueError("Unsupported transition.")
         project = self._project()
         scene = next((item for item in project["scenes"] if item["id"] == scene_id), None)
@@ -285,7 +325,7 @@ class SceneVideoStore:
         trim_start = float(item["trim"]["start"])
         trim_end = float(item["trim"]["end"] or item["probe"]["duration"])
         timing = dict(item.get("timing", {}))
-        if target_duration is not None:
+        if target_duration is not None and not timing.get("manual_playback_rate"):
             timing = _timing_policy(trim_end - trim_start, target_duration)
             recommended_end = timing.pop("recommended_trim_end", None)
             if recommended_end is not None:

@@ -20,8 +20,9 @@ class NarrationTimelineService:
         self.project_name = project_name
         self.project_root = self.repo_root / "projects" / project_name
         self.source_path = self.project_root / "narration.json"
-        if not self.source_path.is_file():
-            raise FileNotFoundError(f"Narration source not found: {self.source_path}")
+        self.remotion_path = self.project_root / "remotion.json"
+        if not self.project_root.is_dir() or (not self.remotion_path.is_file() and not self.source_path.is_file()):
+            raise FileNotFoundError(f"Project narration/remotion data not found: {self.project_root}")
 
     @staticmethod
     def _phrases(text: str) -> list[str]:
@@ -89,13 +90,32 @@ class NarrationTimelineService:
         return result
 
     def prepare(self, *, synthesize: bool = True) -> dict[str, Any]:
-        source = json.loads(self.source_path.read_text(encoding="utf-8"))
-        remotion_path = self.project_root / "remotion.json"
-        existing_project = json.loads(remotion_path.read_text(encoding="utf-8")) if remotion_path.is_file() else {}
+        existing_project = json.loads(self.remotion_path.read_text(encoding="utf-8")) if self.remotion_path.is_file() else {}
+        if self.source_path.is_file():
+            # Legacy narration.json remains supported for established projects.
+            source = json.loads(self.source_path.read_text(encoding="utf-8"))
+        else:
+            # In projects created by the desktop workflow the approved script
+            # already lives in remotion.json; do not duplicate or rewrite it.
+            manifest_path = self.project_root / "project.json"
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8")) if manifest_path.is_file() else {}
+            source = {
+                "title": manifest.get("name", existing_project.get("name", self.project_name)),
+                "voice": manifest.get("voice", {}),
+                "scenes": [
+                    {"id": scene["id"], "narration": scene.get("narration", ""), "intent": scene.get("intent", "")}
+                    for scene in existing_project.get("scenes", [])
+                    if str(scene.get("narration", "")).strip()
+                ],
+            }
+            if not source["scenes"]:
+                raise ValueError("No approved scene script is available for narration.")
+        remotion_path = self.remotion_path
         existing_scenes = {str(item.get("id")): item for item in existing_project.get("scenes", [])}
         fps = 30
         pause = float(source.get("scene_pause_seconds", 0.35))
-        audio_root = self.project_root / "audio"
+        is_desktop_project = (self.project_root / "project.json").is_file()
+        audio_root = self.project_root / ("voice/narration" if is_desktop_project else "audio")
         audio_root.mkdir(parents=True, exist_ok=True)
         voice_config = VoiceConfig.from_project(source)
         if synthesize and voice_config.approval_required and not voice_config.approved:
@@ -121,7 +141,7 @@ class NarrationTimelineService:
                 "durationInFrames": scene_frames,
                 "narration": item["narration"],
                 "intent": item.get("intent", ""),
-                "narrationAudio": f"audio/{scene_id}.wav",
+                "narrationAudio": f"{'voice/narration' if is_desktop_project else 'audio'}/{scene_id}.wav",
                 "subtitle": self._subtitle_timing(phrases, duration, fps),
             })
             scene.setdefault("approved", False)

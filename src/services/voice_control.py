@@ -54,15 +54,21 @@ class VoiceControlService:
     def __init__(self, project_root: Path | str, *, registry: ProviderRegistry | None = None):
         self.project_root = Path(project_root).resolve()
         self.narration_path = self.project_root / "narration.json"
+        self.manifest_path = self.project_root / "project.json"
         self.state_path = self.project_root / "voice-control-state.json"
-        self.preview_root = self.project_root / "output" / "voice_previews"
+        self.preview_root = self.project_root / ("voice/previews" if self.manifest_path.is_file() else "output/voice_previews")
         self.registry = registry or ProviderRegistry()
-        if not self.narration_path.is_file():
-            raise FileNotFoundError(f"Narration source not found: {self.narration_path}")
+        if not self.narration_path.is_file() and not self.manifest_path.is_file():
+            raise FileNotFoundError(f"Project voice config not found in: {self.project_root}")
         self.state = self._load_state()
 
     def _project_data(self) -> dict[str, Any]:
-        return json.loads(self.narration_path.read_text(encoding="utf-8"))
+        path = self.manifest_path if self.manifest_path.is_file() else self.narration_path
+        return json.loads(path.read_text(encoding="utf-8"))
+
+    def _save_project_data(self, project: dict[str, Any]) -> None:
+        path = self.manifest_path if self.manifest_path.is_file() else self.narration_path
+        path.write_text(json.dumps(project, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
 
     def _load_state(self) -> VoiceControlState:
         if self.state_path.is_file():
@@ -335,7 +341,7 @@ class VoiceControlService:
         config.approved = False
         project = self._project_data()
         project["voice"] = config.to_dict()
-        self.narration_path.write_text(json.dumps(project, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        self._save_project_data(project)
         self.state.voiceProvider = config.provider
         self.state.voiceMode = config.mode
         self.state.gender = str(config.design.get("gender") or "male")
@@ -356,7 +362,7 @@ class VoiceControlService:
         config.approval_required = True
         config.approved = True
         project["voice"] = config.to_dict()
-        self.narration_path.write_text(json.dumps(project, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        self._save_project_data(project)
         return project["voice"]
 
     def regenerate_narration(self) -> dict[str, Any]:

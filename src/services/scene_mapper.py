@@ -7,6 +7,7 @@ from typing import Any
 
 
 SCENE_PATTERN = re.compile(r"scene[_ -]?(\d+)", re.IGNORECASE)
+MEDIA_EXTENSIONS = {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
 
 
 @dataclass(frozen=True)
@@ -26,7 +27,7 @@ class SceneMapper:
         detected: list[SceneFile] = []
         unmatched: list[Path] = []
         for path in root.rglob("*"):
-            if not path.is_file() or path.suffix.lower() != ".mp4":
+            if not path.is_file() or path.suffix.lower() not in MEDIA_EXTENSIONS:
                 continue
             item = cls.detect(path)
             (detected if item else unmatched).append(item if item else path)

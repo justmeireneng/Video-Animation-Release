@@ -95,7 +95,7 @@ export type Scene = {
     scaleTo?: number;
   };
   focalPoint: FocalPoint;
-  transition: 'soft_slide' | 'crossfade' | 'wipe_reveal' | 'paper' | 'none';
+  transition: 'soft_slide' | 'crossfade' | 'wipe_reveal' | 'zoom_dissolve' | 'paper' | 'none';
   subtitleOffsetY?: number;
   parallax?: {
     background?: string;

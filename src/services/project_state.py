@@ -7,7 +7,10 @@ from typing import Any
 
 
 class ProjectStateService:
-    STATES = {"UPLOADED", "MAPPED", "READY", "RENDERING", "REVIEW", "APPROVED", "NEEDS_CHANGES", "DONE"}
+    STATES = {
+        "DRAFT", "UPLOADED", "MAPPED", "SCRIPT_MAPPING", "VOICE_SETUP", "READY_TO_RENDER",
+        "READY", "RENDERING", "REVIEW", "POST_RENDER_REVIEW", "APPROVED", "NEEDS_CHANGES", "DONE",
+    }
 
     def __init__(self, project_root: Path | str):
         self.project_root = Path(project_root).resolve()
@@ -16,7 +19,7 @@ class ProjectStateService:
     def get(self) -> dict[str, Any]:
         if self.path.exists():
             return json.loads(self.path.read_text(encoding="utf-8"))
-        return {"status": "UPLOADED", "history": []}
+        return {"status": "DRAFT", "history": []}
 
     def set(self, status: str, note: str = "") -> dict[str, Any]:
         if status not in self.STATES:

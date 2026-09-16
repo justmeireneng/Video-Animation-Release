@@ -19,6 +19,9 @@ from src.services.render_service import RenderService
 from src.services.narration_timeline import NarrationTimelineService
 from src.services.voice_service import VoiceConfig, VoiceService
 from src.services.voice_control import VoiceControlService
+from src.services.script_service import ScriptService
+from src.services.studio_project import LocalProjectManager
+from src.studio_server import serve_studio
 from src.providers.voice.registry import DEFAULT_VOICE_PROVIDER, ProviderRegistry
 from src.review.voice_control_review import serve_voice_control
 
@@ -38,11 +41,19 @@ def show_status(project_name: str):
 
     print(f"=== PROJECT STATUS: {project_name} ===")
     scenes = list((proj_dir / "scenes").glob("*.png"))
-    source_videos = list((proj_dir / "scenes").glob("*/source/*.mp4"))
-    audio = list((proj_dir / "audio").glob("*.wav"))
-    output = list((proj_dir / "output").glob("*.mp4"))
+    source_videos = [
+        path for path in (proj_dir / "scenes").glob("*/source/*")
+        if path.suffix.lower() in {".mp4", ".mov", ".mkv", ".webm", ".m4v"}
+    ]
+    audio = list((proj_dir / "audio").glob("*.wav")) + list((proj_dir / "voice" / "narration").glob("*.wav"))
+    output = list((proj_dir / "output").glob("*.mp4")) + list((proj_dir / "render").rglob("*.mp4"))
 
-    print(f"  Scenes count: {len(scenes)} images (1080x1920)")
+    scene_slots = 0
+    remotion = proj_dir / "remotion.json"
+    if remotion.is_file():
+        scene_slots = len(json.loads(remotion.read_text(encoding="utf-8")).get("scenes", []))
+    print(f"  Scene slots:  {scene_slots}")
+    print(f"  Scene images: {len(scenes)}")
     print(f"  Source clips: {len(source_videos)} versioned files")
     print(f"  Audio count:  {len(audio)} files")
     print(f"  Final videos: {len(output)} files")
@@ -171,6 +182,16 @@ def main():
     exp_parser.add_argument("project_name", help="Name of project")
     exp_parser.add_argument("--out", default="export", help="Output directory")
 
+    new_project = subparsers.add_parser("new-project", help="Create an empty local AI Video Studio project")
+    new_project.add_argument("name", help="Display name for the new project")
+    new_project.add_argument("--id", help="Optional safe project id; defaults to a name-derived id")
+
+    subparsers.add_parser("list-projects", help="List local project manifests")
+
+    serve_studio_parser = subparsers.add_parser("serve-studio", help="Serve the local desktop UI and project API")
+    serve_studio_parser.add_argument("--host", default="127.0.0.1")
+    serve_studio_parser.add_argument("--port", type=int, default=8765)
+
     preview_parser = subparsers.add_parser("preview-video", help="Open a project in Remotion Studio")
     preview_parser.add_argument("project_name", help="Project with remotion-props.json")
 
@@ -236,7 +257,19 @@ def main():
     transition = subparsers.add_parser("set-scene-transition", help="Override a scene transition")
     transition.add_argument("project_name")
     transition.add_argument("--scene", required=True)
-    transition.add_argument("--transition", choices=["crossfade", "soft_slide", "wipe_reveal", "paper", "none"], required=True)
+    transition.add_argument("--transition", choices=["crossfade", "soft_slide", "wipe_reveal", "zoom_dissolve", "paper", "none"], required=True)
+
+    source_speed = subparsers.add_parser("set-scene-video-speed", help="Set non-destructive source-video playback speed")
+    source_speed.add_argument("project_name")
+    source_speed.add_argument("--scene", required=True)
+    source_speed.add_argument("--version", type=int, required=True)
+    source_speed.add_argument("--speed", type=float, required=True, help="0.50 to 2.00")
+
+    source_hold = subparsers.add_parser("set-scene-hold-last-frame", help="Enable or disable a final-frame hold")
+    source_hold.add_argument("project_name")
+    source_hold.add_argument("--scene", required=True)
+    source_hold.add_argument("--version", type=int, required=True)
+    source_hold.add_argument("--enabled", choices=["true", "false"], required=True)
 
     subtitle_offset = subparsers.add_parser("set-subtitle-offset", help="Move one scene subtitle vertically in pixels")
     subtitle_offset.add_argument("project_name")
@@ -249,6 +282,21 @@ def main():
     narration = subparsers.add_parser("prepare-narration", help="Synthesize narration and build phrase subtitle timing")
     narration.add_argument("project_name")
     narration.add_argument("--reuse-audio", action="store_true")
+
+    import_script = subparsers.add_parser("import-script", help="Import a TXT script and map SCENE blocks exactly")
+    import_script.add_argument("project_name")
+    import_script.add_argument("txt_path")
+
+    set_script = subparsers.add_parser("set-scene-script", help="Set narration text for exactly one existing scene")
+    set_script.add_argument("project_name")
+    set_script.add_argument("--scene", type=int, required=True)
+    set_script.add_argument("--text", required=True)
+
+    approve_script = subparsers.add_parser("approve-script-mapping", help="Approve all mapped scene narration before voice generation")
+    approve_script.add_argument("project_name")
+
+    validate_project = subparsers.add_parser("validate-project", help="Show per-scene script/video readiness")
+    validate_project.add_argument("project_name")
 
     subparsers.add_parser("voice-providers", help="Show lazy provider/voice/engine data for the future UI")
 
@@ -282,6 +330,9 @@ def main():
     approve_project = subparsers.add_parser("approve-project", help="Approve the current final review")
     approve_project.add_argument("project_name")
 
+    approve_preview = subparsers.add_parser("approve-preview", help="Approve a watched preview before final render")
+    approve_preview.add_argument("project_name")
+
     request_changes = subparsers.add_parser("request-changes", help="Mark the project as needing scene-level changes")
     request_changes.add_argument("project_name")
     request_changes.add_argument("--note", default="")
@@ -291,6 +342,12 @@ def main():
         show_status(args.project_name)
     elif args.command == "export-project":
         export_project(args.project_name, args.out)
+    elif args.command == "new-project":
+        _print_video_record(LocalProjectManager(ROOT_DIR).create(args.name, project_id=args.id))
+    elif args.command == "list-projects":
+        _print_video_record({"projects": LocalProjectManager(ROOT_DIR).list()})
+    elif args.command == "serve-studio":
+        serve_studio(ROOT_DIR, ROOT_DIR / "ui-prototype", args.host, args.port)
     elif args.command == "preview-video":
         _run_remotion(args.project_name, studio=True)
     elif args.command == "render-video":
@@ -323,12 +380,26 @@ def main():
         ))
     elif args.command == "set-scene-transition":
         _print_video_record(_video_store(args.project_name).set_transition(args.scene, args.transition))
+    elif args.command == "set-scene-video-speed":
+        _print_video_record(_video_store(args.project_name).set_playback_speed(args.scene, args.version, args.speed))
+    elif args.command == "set-scene-hold-last-frame":
+        _print_video_record(_video_store(args.project_name).set_hold_last_frame(
+            args.scene, args.version, args.enabled == "true",
+        ))
     elif args.command == "set-subtitle-offset":
         _print_video_record(_video_store(args.project_name).set_subtitle_offset(args.scene, args.y))
     elif args.command == "render-preview":
         print(f"Preview render: {RenderService(ROOT_DIR, args.project_name).render_preview()}")
     elif args.command == "prepare-narration":
         _print_video_record(NarrationTimelineService(ROOT_DIR, args.project_name).prepare(synthesize=not args.reuse_audio))
+    elif args.command == "import-script":
+        _print_video_record(ScriptService(ROOT_DIR, args.project_name).import_text_file(args.txt_path))
+    elif args.command == "set-scene-script":
+        _print_video_record(ScriptService(ROOT_DIR, args.project_name).update_scene(args.scene, args.text))
+    elif args.command == "approve-script-mapping":
+        _print_video_record(ScriptService(ROOT_DIR, args.project_name).approve_mapping())
+    elif args.command == "validate-project":
+        _print_video_record({"scenes": ScriptService(ROOT_DIR, args.project_name).validation()})
     elif args.command == "voice-providers":
         _print_video_record({
             "default_voice_provider": "omnivoice",
@@ -336,9 +407,11 @@ def main():
         })
     elif args.command == "voice-preview":
         project_root = ROOT_DIR / "projects" / args.project_name
-        source_path = project_root / "narration.json"
+        source_path = project_root / "project.json"
         if not source_path.is_file():
-            print(f"Error: Narration source not found: {source_path}")
+            source_path = project_root / "narration.json"
+        if not source_path.is_file():
+            print(f"Error: Project voice config not found: {project_root}")
             sys.exit(1)
         voice_config = VoiceConfig.from_project(json.loads(source_path.read_text(encoding="utf-8")))
         # VoiceStudio is intentionally outside the current production scope.
@@ -372,6 +445,8 @@ def main():
         state = ProjectStateService(ROOT_DIR / "projects" / args.project_name)
         state.set("APPROVED", "final review approved")
         _print_video_record(state.set("DONE", "final MP4 ready for download"))
+    elif args.command == "approve-preview":
+        _print_video_record(RenderService(ROOT_DIR, args.project_name).approve_preview())
     elif args.command == "request-changes":
         _print_video_record(ProjectStateService(ROOT_DIR / "projects" / args.project_name).set("NEEDS_CHANGES", args.note))
 

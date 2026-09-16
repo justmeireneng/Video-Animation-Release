@@ -131,8 +131,15 @@ class VoiceService:
         fallback: bool = True,
     ):
         self.project_root = Path(project_root).resolve()
-        self.cache_root = self.project_root / ".voice-cache"
-        self.preview_root = self.project_root / ".voice-preview"
+        # New local projects keep all voice artefacts in the documented
+        # project layout.  Older projects keep their established folders so
+        # opening Atlantic does not invalidate an existing cache.
+        if (self.project_root / "project.json").is_file():
+            self.cache_root = self.project_root / "voice" / "cache"
+            self.preview_root = self.project_root / "voice" / "previews"
+        else:
+            self.cache_root = self.project_root / ".voice-cache"
+            self.preview_root = self.project_root / ".voice-preview"
         self.registry = registry or ProviderRegistry()
         self.fallback = fallback
         self.last_warning: str | None = None

@@ -100,6 +100,21 @@ class TestSceneVideoStore(unittest.TestCase):
         self.assertEqual(full["source_audio"]["volume"], 0.6)
         self.assertFalse(full["source_audio"]["duck_under_narration"])
 
+    def test_manual_speed_and_hold_are_non_destructive_and_projected(self):
+        self.store.import_video("scene_01", self.source)
+        edited = self.store.set_playback_speed("scene_01", 1, 1.75)
+        held = self.store.set_hold_last_frame("scene_01", 1, True)
+        project = json.loads(self.store.remotion_path.read_text(encoding="utf-8"))
+        source = project["scenes"][0]["videoSources"][0]
+        self.assertEqual(edited["timing"]["playback_rate"], 1.75)
+        self.assertTrue(edited["timing"]["manual_playback_rate"])
+        self.assertTrue(held["timing"]["hold_last_frame"])
+        self.assertEqual(source["playbackRate"], 1.75)
+        self.assertTrue(source["holdLastFrame"])
+        with self.assertRaises(ValueError):
+            self.store.set_playback_speed("scene_01", 1, 2.01)
+        self.assertEqual(self.source.read_bytes(), b"test-video")
+
     def test_subtitle_phrase_groups_stay_compact(self):
         phrases = NarrationTimelineService._phrases(
             "Đại Tây Dương không chỉ là một khoảng nước nằm giữa các lục địa."

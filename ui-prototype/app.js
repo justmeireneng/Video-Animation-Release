@@ -1,6 +1,7 @@
 /*
- * Static desktop prototype only. State domains mirror the future Tauri + React
- * app boundary; no request in this file calls the current Python backend.
+ * Local desktop UI.  When opened through `python app.py serve-studio`, its
+ * project/source/script actions are backed by the loopback Python service.
+ * The in-memory fallback below only keeps this design file viewable by itself.
  */
 const NAVIGATION = [
   ["dashboard", "▦", "Dashboard"], ["import", "⇩", "Import"], ["script", "≡", "Script"],
@@ -38,12 +39,6 @@ const VOICE_CAPABILITIES = {
 
 const DEFAULT_NARRATION = "Dự án này bắt đầu bằng bối cảnh rõ ràng, sau đó dẫn người xem qua các ý chính theo từng cảnh có thể kiểm soát độc lập.";
 
-const PROJECT_SEEDS = [
-  { id: "atlantic-ocean", name: "Atlantic Ocean", initials: "AO", stage: "SCRIPT_MAPPING", sceneCount: 14, resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: true, updated: "Updated today" },
-  { id: "urban-gardens", name: "Urban Gardens", initials: "UG", stage: "VOICE_SETUP", sceneCount: 8, resolution: "1920 × 1080", aspect: "16:9", fps: 30, imported: true, updated: "Updated yesterday" },
-  { id: "product-launch", name: "Product Launch 2026", initials: "PL", stage: "DRAFT", sceneCount: 0, resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: false, updated: "Created Sep 16" },
-];
-
 function makeScenes(count) {
   const subjects = ["Opening context", "Core idea", "Key evidence", "Detail", "Change over time", "Human perspective", "Practical impact", "System view", "Next question", "Closing thought"];
   return Array.from({ length: count }, (_, index) => ({
@@ -63,29 +58,14 @@ function makeScenes(count) {
 }
 
 const state = {
-  workspaceState: { projects: PROJECT_SEEDS.map(project => ({ ...project })), activeProjectId: "atlantic-ocean" },
-  projectState: { id: "atlantic-ocean", name: "Atlantic Ocean", initials: "AO", stage: "SCRIPT_MAPPING", resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: true },
-  sceneState: { items: makeScenes(14), selectedId: "scene_01", sceneCount: 14, timelineZoom: 1 },
-  scriptState: { bulkText: "SCENE 1\nNarration:\n\"Mỗi dự án bắt đầu bằng một bối cảnh rõ ràng và một mục tiêu cụ thể cho người xem.\"\n\nSCENE 2\nNarration:\n\"Từ đó, từng cảnh có thể phát triển ý chính theo một cấu trúc nhất quán.\"", mapped: 2, missing: 12, approved: false },
+  workspaceState: { projects: [], activeProjectId: null },
+  projectState: { id: "", name: "No project", initials: "NP", stage: "DRAFT", resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: false },
+  sceneState: { items: [], selectedId: null, sceneCount: 0, timelineZoom: 1 },
+  scriptState: { bulkText: "", mapped: 0, missing: 0, approved: false },
   voiceState: {
     provider: "omnivoice", language: "vi", locale: "default", mode: "voice_design", gender: "male", age: "young adult", pitch: "moderate", style: "documentary", speed: 1.1,
-    profileId: "vn-documentary-male", previewText: DEFAULT_NARRATION, previewStatus: "READY", playing: false, subtitleSync: "SYNCED", advancedOpen: false,
-    profiles: [
-      { id: "vn-documentary-male", name: "Vietnamese Documentary Male", provider: "omnivoice", language: "vi", locale: "default", mode: "voice_design", gender: "male", pitch: "moderate", speed: 1.1 },
-      { id: "vn-documentary-female", name: "Vietnamese Documentary Female", provider: "omnivoice", language: "vi", locale: "default", mode: "voice_design", gender: "female", pitch: "moderate", speed: 1.08 },
-      { id: "en-explainer", name: "English Explainer", provider: "future", language: "en", locale: "en-US", mode: "voice_design", gender: "female", pitch: "moderate", speed: 1.0 },
-    ],
-    history: [
-      { id: "a", name: "Male 1.08", language: "Vietnamese", gender: "Male", speed: 1.08, duration: "8.1s", created: "2 min ago" },
-      { id: "b", name: "Male 1.12", language: "Vietnamese", gender: "Male", speed: 1.12, duration: "7.8s", created: "12 min ago" },
-      { id: "c", name: "Female 1.08", language: "Vietnamese", gender: "Female", speed: 1.08, duration: "8.2s", created: "Today" },
-      { id: "d", name: "Female 1.12", language: "Vietnamese", gender: "Female", speed: 1.12, duration: "7.9s", created: "Today" },
-    ],
-    comparisons: [
-      { id: "A", gender: "Male", language: "Vietnamese", speed: 1.08, selected: true },
-      { id: "B", gender: "Female", language: "Vietnamese", speed: 1.12, selected: false },
-    ],
-    pronunciation: [{ original: "Gulf Stream", pronunciation: "Gâlf Strim" }],
+    profileId: null, previewText: DEFAULT_NARRATION, previewStatus: "NOT GENERATED", playing: false, subtitleSync: "PENDING", advancedOpen: false,
+    profiles: [], history: [], comparisons: [], pronunciation: [],
   },
   subtitleState: { language: "same", font: "Be Vietnam Pro", weight: "SemiBold", size: 55, position: "Bottom", offset: 102, highlight: true, safeZone: true },
   audioState: { narration: 100, source: 30, bgm: 12, sfx: 35, master: 100 },
@@ -101,6 +81,88 @@ const DEFAULT_SUBTITLE_STATE = structuredClone(state.subtitleState);
 const DEFAULT_AUDIO_STATE = structuredClone(state.audioState);
 const DEFAULT_RENDER_STATE = structuredClone(state.renderState);
 
+const STUDIO_API = "/api";
+let backendOnline = false;
+
+async function apiRequest(path, options = {}) {
+  const headers = { ...(options.body instanceof Blob ? {} : { "Content-Type": "application/json" }), ...(options.headers || {}) };
+  const response = await fetch(`${STUDIO_API}${path}`, { ...options, headers });
+  const payload = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(payload.error || `Local request failed (${response.status})`);
+  return payload;
+}
+
+function initials(value) {
+  return String(value || "Untitled").split(/\s+/).filter(Boolean).slice(0, 2).map(word => word[0]).join("").toUpperCase() || "NP";
+}
+
+function projectSummaryForUi(item) {
+  return {
+    id: item.id, name: item.name, initials: initials(item.name), stage: item.status || "DRAFT",
+    sceneCount: item.scene_count || 0, resolution: "1080 × 1920", aspect: "9:16", fps: 30,
+    imported: Boolean(item.imported), updated: item.updated_at ? "Updated locally" : "Local project",
+  };
+}
+
+function applyBackendProject(detail) {
+  const manifest = detail.project || {};
+  const remotion = detail.remotion || {};
+  const voice = manifest.voice || {};
+  const summary = projectSummaryForUi({ id: manifest.id, name: manifest.name, status: detail.workflow?.status || manifest.status, scene_count: detail.scenes?.length, imported: manifest.source?.imported });
+  const existing = state.workspaceState.projects.find(item => item.id === summary.id);
+  if (existing) Object.assign(existing, summary); else state.workspaceState.projects.unshift(summary);
+  state.workspaceState.activeProjectId = summary.id;
+  state.projectState = { id: summary.id, name: summary.name, initials: summary.initials, stage: summary.stage, resolution: `${remotion.width || 1080} × ${remotion.height || 1920}`, aspect: "9:16", fps: remotion.fps || 30, imported: summary.imported };
+  state.sceneState = {
+    items: (detail.scenes || []).map(item => {
+      const video = item.video || {};
+      const current = (video.versions || []).find(version => version.version === video.active_version) || {};
+      const audio = current.source_audio || video.source_audio || {};
+      const timing = current.timing || {};
+      return {
+        id: item.id, number: item.number, title: `Scene ${String(item.number).padStart(2, "0")}`,
+        narration: item.narration || "", source: current.source_provider ? "Google Flow" : "Missing",
+        sourceVersion: current.version || 0, duration: +(current.probe?.duration || Math.max(1, item.duration_in_frames / (remotion.fps || 30))).toFixed(1),
+        status: current.status || video.status || "missing", sourceAudio: { mode: audio.mode || "mute", volume: Math.round((audio.volume || 0) * 100), duck: Boolean(audio.duck_under_narration), fadeIn: audio.fade_in || 0, fadeOut: audio.fade_out || 0 },
+        edit: { trimStart: current.trim?.start || 0, trimEnd: current.trim?.end || null, speed: timing.playback_rate || 1, crop: current.crop?.mode || "cover", position: "center", holdLastFrame: Boolean(timing.hold_last_frame), transition: item.transition || "none" },
+        decision: "keep", voiceOverride: null,
+      };
+    }),
+    selectedId: detail.scenes?.[0]?.id || null, sceneCount: detail.scenes?.length || 0, timelineZoom: 1,
+  };
+  state.scriptState = { bulkText: detail.script_text || "", mapped: state.sceneState.items.filter(scene => scene.narration).length, missing: state.sceneState.items.filter(scene => !scene.narration).length, approved: Boolean(manifest.script?.approved) };
+  state.voiceState = { ...structuredClone(DEFAULT_VOICE_STATE), provider: voice.provider || "omnivoice", language: voice.language || "vi", locale: voice.locale || "default", mode: voice.mode || "voice_design", gender: voice.design?.gender || "male", age: voice.design?.age || "young adult", pitch: voice.design?.pitch || "moderate", speed: voice.speed || 1.1 };
+  state.workflowState = { scriptApproved: Boolean(manifest.script?.approved), voiceApproved: Boolean(voice.approved), previewReady: Boolean(manifest.render?.preview_ready) };
+  state.reviewState = { finalized: Boolean(manifest.render?.final_ready), dirty: false, showCutsOnly: false };
+  state.automationState = { status: summary.imported ? "SOURCE READY" : "IDLE", progress: summary.imported ? 100 : 0, step: summary.imported ? 1 : 0 };
+  state.renderState = { ...structuredClone(DEFAULT_RENDER_STATE), requestScene: state.sceneState.selectedId || "" };
+}
+
+async function loadBackendProject(projectId) {
+  const detail = await apiRequest(`/projects/${encodeURIComponent(projectId)}`);
+  applyBackendProject(detail);
+  state.uiState.projectMenuOpen = false;
+  renderScreen();
+  return detail;
+}
+
+async function hydrateLocalWorkspace() {
+  try {
+    const payload = await apiRequest("/projects");
+    backendOnline = true;
+    state.workspaceState.projects = payload.projects.map(projectSummaryForUi);
+    if (state.workspaceState.projects.length) await loadBackendProject(state.workspaceState.projects[0].id);
+    else {
+      state.workspaceState.activeProjectId = null;
+      state.projectState = { id: "", name: "No project", initials: "NP", stage: "DRAFT", resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: false };
+      state.sceneState = { items: [], selectedId: null, sceneCount: 0, timelineZoom: 1 };
+      renderScreen();
+    }
+  } catch (_) {
+    backendOnline = false;
+  }
+}
+
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const escapeHtml = (value) => String(value).replace(/[&<>'"]/g, char => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#039;", '"': "&quot;" }[char]));
@@ -110,7 +172,7 @@ const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.round
 const keptScenes = () => state.sceneState.items.filter(scene => scene.decision !== "cut");
 const cutScenes = () => state.sceneState.items.filter(scene => scene.decision === "cut");
 const projectDuration = () => keptScenes().reduce((total, item) => total + item.duration, 0);
-const activeProject = () => state.workspaceState.projects.find(project => project.id === state.workspaceState.activeProjectId) || state.workspaceState.projects[0];
+const activeProject = () => state.workspaceState.projects.find(project => project.id === state.workspaceState.activeProjectId) || state.workspaceState.projects[0] || { id: "", name: "No project", initials: "NP", stage: "DRAFT", sceneCount: 0, imported: false, updated: "Create a local project" };
 
 function projectStageLabel(stage) {
   return ({ UPLOADED: "Uploaded", MAPPED: "Mapped", SCRIPT: "Script", SCRIPT_MAPPING: "Script mapping", VOICE_SETUP: "Voice setup", READY_TO_RENDER: "Ready to render", PROCESSING: "Preparing source", POST_RENDER_REVIEW: "Post-render review", FINAL_REVIEW: "Final review", RENDERING: "Rendering", REVIEW: "Review", APPROVED: "Approved", NEEDS_CHANGES: "Needs changes", DONE: "Done", DRAFT: "Draft" })[stage] || stage;
@@ -134,6 +196,10 @@ function syncActiveProject() {
 }
 
 function activateProject(id) {
+  if (backendOnline) {
+    loadBackendProject(id).catch(error => toast(error.message, "warning"));
+    return;
+  }
   if (id === state.workspaceState.activeProjectId) { state.uiState.projectMenuOpen = false; renderProjectContext(); return; }
   syncActiveProject();
   const project = state.workspaceState.projects.find(item => item.id === id);
@@ -158,27 +224,15 @@ function activateProject(id) {
 }
 
 function createProject() {
-  syncActiveProject();
-  const number = state.workspaceState.projects.length + 1;
-  const project = { id: `untitled-project-${Date.now()}`, name: `Untitled Project ${number}`, initials: "NP", stage: "DRAFT", sceneCount: 0, resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: false, updated: "Created just now" };
-  state.workspaceState.projects.unshift(project);
-  state.workspaceState.activeProjectId = project.id;
-  state.projectState = { id: project.id, name: project.name, initials: project.initials, stage: project.stage, resolution: project.resolution, aspect: project.aspect, fps: project.fps, imported: project.imported };
-  state.sceneState = { items: [], selectedId: null, sceneCount: 0, timelineZoom: 1 };
-  state.scriptState = { bulkText: "", mapped: 0, missing: 0, approved: false };
-  state.voiceState = structuredClone(DEFAULT_VOICE_STATE);
-  state.subtitleState = structuredClone(DEFAULT_SUBTITLE_STATE);
-  state.audioState = structuredClone(DEFAULT_AUDIO_STATE);
-  state.renderState = structuredClone(DEFAULT_RENDER_STATE);
-  state.workflowState = { scriptApproved: false, voiceApproved: false, previewReady: false };
-  state.reviewState = { finalized: false, dirty: false };
-  state.automationState = { status: "IDLE", progress: 0, step: 0 };
-  state.renderState.requestScene = "";
-  state.uiState.projectMenuOpen = false;
-  state.uiState.screen = "import";
-  toast("New project created. Add a source when ready.");
-  savePulse();
-  renderScreen();
+  if (backendOnline) {
+    const name = window.prompt("Project name", "Untitled Project");
+    if (!name?.trim()) return;
+    apiRequest("/projects", { method: "POST", body: JSON.stringify({ name: name.trim() }) })
+      .then(detail => { applyBackendProject(detail); state.uiState.screen = "import"; toast("Local project created."); renderScreen(); })
+      .catch(error => toast(error.message, "warning"));
+    return;
+  }
+  toast("Start the local studio server before creating a project.", "warning");
 }
 
 function renderProjectContext() {
@@ -314,7 +368,7 @@ function renderVoice() {
       </div></article>
       <details class="disclosure" ${voice.advancedOpen ? "open" : ""}><summary data-action="toggle-advanced">ADVANCED VOICE CONTROLS <span>⌄</span></summary><div class="advanced-inner disabled-layer"><div class="disabled-notice">These controls are designed for future engines. OmniVoice does not advertise them, so they are disabled.</div>${["Energy", "Expressiveness", "Stability", "Pause Strength", "Sentence Gap", "Emotion Strength"].map(label => `<div><label class="control-label">${label}<em>Unavailable</em></label><input type="range" disabled value="50" /></div>`).join("")}</div></details>
     </section>
-    <section><article class="voice-preview-stage"><div class="preview-stage-head"><div><p class="eyebrow">Preview first</p><h2>Shape narration before rendering</h2></div><span class="preview-state">${voice.previewStatus}</span></div><textarea class="preview-copy" data-setting="preview-text">${escapeHtml(voice.previewText)}</textarea><div class="waveform ${voice.playing ? "playing" : ""}" id="waveform">${waves}</div><div class="preview-controls"><div class="preview-buttons"><button class="button" data-action="generate-preview">Generate Preview</button><button class="button-secondary" data-action="play-preview">${voice.playing ? "Stop" : "Play"}</button></div><span class="audio-detail">Mock WAV · ${voice.speed.toFixed(2)}x · ${voice.gender === "male" ? "Nam Minh" : "Hoài My"}</span></div><div class="voice-status-grid"><div class="voice-status"><span>Voice Engine</span><b>OmniVoice</b></div><div class="voice-status"><span>Selected Profile</span><b>${escapeHtml((voice.profiles.find(profile => profile.id === voice.profileId) || {}).name || "Custom")}</b></div><div class="voice-status"><span>Subtitle Sync</span><b class="${voice.subtitleSync === "SYNCED" ? "check" : "warning"}">${voice.subtitleSync}</b></div></div>${voice.subtitleSync !== "SYNCED" ? `<button class="button-secondary" style="position:relative;z-index:1;margin-top:11px" data-action="update-timing">Update Timing</button>` : ""}</article>
+    <section><article class="voice-preview-stage"><div class="preview-stage-head"><div><p class="eyebrow">Preview first</p><h2>Shape narration before rendering</h2></div><span class="preview-state">${voice.previewStatus}</span></div><textarea class="preview-copy" data-setting="preview-text">${escapeHtml(voice.previewText)}</textarea><div class="waveform ${voice.playing ? "playing" : ""}" id="waveform">${waves}</div><div class="preview-controls"><div class="preview-buttons"><button class="button" data-action="generate-preview">Generate Preview</button><button class="button-secondary" data-action="play-preview">${voice.playing ? "Stop" : "Play"}</button></div><span class="audio-detail">Local OmniVoice model required · ${voice.speed.toFixed(2)}x · ${voice.gender === "male" ? "Nam Minh" : "Hoài My"}</span></div><div class="voice-status-grid"><div class="voice-status"><span>Voice Engine</span><b>OmniVoice</b></div><div class="voice-status"><span>Selected Profile</span><b>${escapeHtml((voice.profiles.find(profile => profile.id === voice.profileId) || {}).name || "Custom")}</b></div><div class="voice-status"><span>Subtitle Sync</span><b class="${voice.subtitleSync === "SYNCED" ? "check" : "warning"}">${voice.subtitleSync}</b></div></div>${voice.subtitleSync !== "SYNCED" ? `<button class="button-secondary" style="position:relative;z-index:1;margin-top:11px" data-action="update-timing">Update Timing</button>` : ""}</article>
       <div class="voice-lower"><article class="card card-pad"><div class="card-head"><div><p class="eyebrow">Preview history</p><h2 class="card-title">A/B-ready takes</h2></div><span class="caption">${voice.history.length} takes</span></div>${history}</article><article class="card card-pad"><div class="card-head"><div><p class="eyebrow">Compare</p><h2 class="card-title">A / B voice slots</h2></div><button class="button-quiet" data-action="add-compare">+ Add slot</button></div><div class="compare-slots">${comparisons}</div></article></div>
       <article class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Pronunciation Dictionary</p><h2 class="card-title">Names, acronyms, and multilingual corrections</h2></div><span class="caption">Stored by project in future</span></div><div class="dictionary-row"><input id="pronounce-original" class="text-input" placeholder="Original · Gulf Stream" /><input id="pronounce-as" class="text-input" placeholder="Pronounce as" /><button class="button-secondary" data-action="add-pronunciation">Add Rule</button></div><div class="dictionary-list">${voice.pronunciation.map(item => `<div class="dictionary-item"><span><b>${escapeHtml(item.original)}</b> → ${escapeHtml(item.pronunciation)}</span><button class="button-quiet" data-action="delete-pronunciation" data-word="${escapeHtml(item.original)}">Delete</button></div>`).join("")}</div></article>
     </section></div></section>`;
@@ -388,12 +442,29 @@ function renderTimeline() {
 
 function setScreen(screen) { state.uiState.screen = screen; state.uiState.projectMenuOpen = false; renderScreen(); }
 function selectScene(id) { if (state.sceneState.items.some(scene => scene.id === id)) { state.sceneState.selectedId = id; savePulse(); renderScreen(); } }
-function markVoiceChanged(message = "Voice changed") { state.voiceState.subtitleSync = "NEEDS UPDATE"; if (state.workflowState.scriptApproved) { state.workflowState.voiceApproved = false; state.workflowState.previewReady = false; state.projectState.stage = "VOICE_SETUP"; } savePulse(message); renderScreen(); }
+function markVoiceChanged(message = "Voice changed") {
+  state.voiceState.subtitleSync = "NEEDS UPDATE";
+  if (state.workflowState.scriptApproved) { state.workflowState.voiceApproved = false; state.workflowState.previewReady = false; state.projectState.stage = "VOICE_SETUP"; }
+  if (backendOnline) {
+    const voice = state.voiceState;
+    apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/voice`, { method: "POST", body: JSON.stringify({ mode: voice.mode, language: voice.language, gender: voice.gender, pitch: voice.pitch, speed: voice.speed }) })
+      .then(() => savePulse(`${message} saved locally`))
+      .catch(error => toast(error.message, "warning"));
+  } else savePulse(message);
+  renderScreen();
+}
 function setVoiceSpeed(value) { state.voiceState.speed = Math.min(1.2, Math.max(.85, +Number(value).toFixed(2))); markVoiceChanged(); }
 function markReviewDirty() { if (state.workflowState.previewReady) { state.reviewState.dirty = true; state.reviewState.finalized = false; state.projectState.stage = "POST_RENDER_REVIEW"; } }
 
 function parseScript() {
   const text = $("#bulk-script")?.value || state.scriptState.bulkText;
+  if (backendOnline) {
+    apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/script`, { method: "POST", body: JSON.stringify({ text }) })
+      .then(() => loadBackendProject(state.projectState.id))
+      .then(() => { state.uiState.screen = "script"; toast("Script mapped to the real project. Review the mapping before approval."); renderScreen(); })
+      .catch(error => toast(error.message, "warning"));
+    return;
+  }
   state.scriptState.bulkText = text;
   const matches = [...text.matchAll(/SCENE\s*(\d+)[\s\S]*?Narration\s*:\s*["“]?([\s\S]*?)(?=\n\s*SCENE\s*\d+|$)/gi)];
   let mapped = 0;
@@ -415,6 +486,13 @@ function parseScript() {
 }
 
 function approveScriptMapping() {
+  if (backendOnline) {
+    apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/script/approve`, { method: "POST", body: "{}" })
+      .then(() => loadBackendProject(state.projectState.id))
+      .then(() => { state.uiState.screen = "voice"; toast("Script mapping approved."); renderScreen(); })
+      .catch(error => toast(error.message, "warning"));
+    return;
+  }
   if (state.scriptState.mapped !== state.sceneState.items.length) { toast("Map every scene before approval.", "warning"); return; }
   state.scriptState.approved = true;
   state.workflowState.scriptApproved = true;
@@ -428,6 +506,10 @@ function approveScriptMapping() {
 }
 
 function approveVoice() {
+  if (backendOnline) {
+    toast("Approve voice only after a real local OmniVoice preview is generated. The current local runtime is intentionally not substituted with a cloud service.", "warning");
+    return;
+  }
   if (!state.workflowState.scriptApproved) { toast("Approve the script mapping first.", "warning"); return; }
   state.workflowState.voiceApproved = true;
   state.workflowState.previewReady = false;
@@ -473,13 +555,54 @@ function runAutoPrep() {
     renderScreen();
   }, 300);
 }
-function mockImport() { runAutoPrep(); }
-function simulateScenes(count) { state.sceneState.items = makeScenes(count); state.sceneState.items.forEach(scene => scene.narration = ""); state.sceneState.sceneCount = count; state.sceneState.selectedId = state.sceneState.items[0]?.id || null; state.scriptState = { bulkText: "", mapped: 0, missing: count, approved: false }; state.workflowState = { scriptApproved: false, voiceApproved: false, previewReady: false }; state.projectState.imported = count > 0; state.projectState.stage = count ? "MAPPED" : "DRAFT"; state.reviewState = { finalized: false, dirty: false, showCutsOnly: false }; state.automationState = { status: "IDLE", progress: 0, step: 0 }; toast(`Prototype now shows ${count} source scenes ready for script mapping.`); savePulse(); renderScreen(); }
-function generatePreview() { state.voiceState.previewStatus = "GENERATING…"; state.voiceState.playing = false; renderScreen(); setTimeout(() => { state.voiceState.previewStatus = "READY"; state.voiceState.history.unshift({ id: `take-${Date.now()}`, name: `${state.voiceState.gender === "male" ? "Male" : "Female"} ${state.voiceState.speed.toFixed(2)}`, language: language().label, gender: state.voiceState.gender === "male" ? "Male" : "Female", speed: state.voiceState.speed, duration: "8.0s", created: "Just now" }); toast("Preview generated (mock). No video render started."); savePulse(); renderScreen(); }, 760); }
+function importZipFile(file) {
+  if (!file || !backendOnline) return;
+  if (!file.name.toLowerCase().endsWith(".zip")) { toast("Choose a ZIP file exported from Flow.", "warning"); return; }
+  state.automationState = { status: "RUNNING", progress: 15, step: 0 };
+  renderScreen();
+  apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/import-zip`, { method: "POST", headers: { "X-File-Name": file.name, "Content-Type": "application/zip" }, body: file })
+    .then(() => loadBackendProject(state.projectState.id))
+    .then(() => { state.uiState.screen = "script"; toast("ZIP imported locally. Review video versions and map the script."); renderScreen(); })
+    .catch(error => { state.automationState = { status: "ERROR", progress: 0, step: 0 }; toast(error.message, "warning"); renderScreen(); });
+}
+function chooseFolderPath() {
+  if (!backendOnline) { runAutoPrep(); return; }
+  const path = window.prompt("Full local path to the Flow source folder");
+  if (!path?.trim()) return;
+  apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/import-path`, { method: "POST", body: JSON.stringify({ path: path.trim() }) })
+    .then(() => loadBackendProject(state.projectState.id))
+    .then(() => { state.uiState.screen = "script"; toast("Folder imported locally."); renderScreen(); })
+    .catch(error => toast(error.message, "warning"));
+}
+function mockImport() { if (backendOnline) { $("#source-zip-input")?.click(); return; } toast("Start the local studio server before importing a source.", "warning"); }
+function simulateScenes(count) { toast("Use a real Flow ZIP or folder for this project.", "warning"); }
+function generatePreview() { toast("Voice preview is blocked until a local OmniVoice runtime with a compatible model license is configured. No cloud fallback is used by this local UI.", "warning"); }
 function togglePlay() { state.voiceState.playing = !state.voiceState.playing; toast(state.voiceState.playing ? "Playing mock preview…" : "Preview stopped."); renderScreen(); }
 function saveProfile() { const voice = state.voiceState; const id = `profile-${Date.now()}`; voice.profiles.unshift({ id, name: `Custom ${language().label} ${voice.gender === "male" ? "Male" : "Female"}`, provider: voice.provider, language: voice.language, locale: voice.locale, mode: voice.mode, gender: voice.gender, pitch: voice.pitch, speed: voice.speed }); voice.profileId = id; toast("Voice profile saved to prototype state."); savePulse(); renderScreen(); }
 function useProfile(id) { const profile = state.voiceState.profiles.find(item => item.id === id); if (!profile) return; Object.assign(state.voiceState, { profileId: id, language: profile.language, locale: profile.locale, mode: profile.mode, gender: profile.gender, pitch: profile.pitch, speed: profile.speed, subtitleSync: "NEEDS UPDATE" }); toast(`${profile.name} applied.`); markVoiceChanged("Voice profile changed"); }
-function startRender(quality) { if (!state.workflowState.scriptApproved || !state.workflowState.voiceApproved) { toast("Approve script mapping and voice before rendering.", "warning"); return; } if (!keptScenes().length) { toast("Keep at least one scene before rendering.", "warning"); return; } const render = state.renderState; state.projectState.stage = "RENDERING"; render.quality = quality; render.status = `RENDERING ${quality.toUpperCase()}`; render.progress = 0; render.activeStep = 0; renderScreen(); const interval = setInterval(() => { render.progress = Math.min(100, render.progress + 9); render.activeStep = Math.min(5, Math.floor(render.progress / 17)); renderScreen(); if (render.progress >= 100) { clearInterval(interval); render.status = quality === "final" ? "FINAL READY FOR REVIEW" : "PREVIEW READY"; render.activeStep = 6; state.workflowState.previewReady = true; state.reviewState.dirty = false; state.projectState.stage = "POST_RENDER_REVIEW"; state.uiState.screen = "scenes"; toast(`${quality === "final" ? "Final" : "Preview"} render complete (mock). Watch it before exporting.`); savePulse("Preview ready for final review"); renderScreen(); } }, 280); }
+function startRender(quality) { if (backendOnline) { toast("Rendering remains blocked until the local OmniVoice narration gate passes; no mock video is produced in a real project.", "warning"); return; } if (!state.workflowState.scriptApproved || !state.workflowState.voiceApproved) { toast("Approve script mapping and voice before rendering.", "warning"); return; } if (!keptScenes().length) { toast("Keep at least one scene before rendering.", "warning"); return; } const render = state.renderState; state.projectState.stage = "RENDERING"; render.quality = quality; render.status = `RENDERING ${quality.toUpperCase()}`; render.progress = 0; render.activeStep = 0; renderScreen(); const interval = setInterval(() => { render.progress = Math.min(100, render.progress + 9); render.activeStep = Math.min(5, Math.floor(render.progress / 17)); renderScreen(); if (render.progress >= 100) { clearInterval(interval); render.status = quality === "final" ? "FINAL READY FOR REVIEW" : "PREVIEW READY"; render.activeStep = 6; state.workflowState.previewReady = true; state.reviewState.dirty = false; state.projectState.stage = "POST_RENDER_REVIEW"; state.uiState.screen = "scenes"; toast(`${quality === "final" ? "Final" : "Preview"} render complete (mock). Watch it before exporting.`); savePulse("Preview ready for final review"); renderScreen(); } }, 280); }
+
+function setBackendVideoStatus(status) {
+  const scene = currentScene();
+  if (!backendOnline || !scene?.sourceVersion) return false;
+  apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/scenes/${encodeURIComponent(scene.id)}/video`, { method: "POST", body: JSON.stringify({ version: scene.sourceVersion, status }) })
+    .then(() => loadBackendProject(state.projectState.id))
+    .then(() => toast(status === "approved" ? "Source version approved." : "Source version flagged for replacement.", status === "approved" ? "success" : "warning"))
+    .catch(error => toast(error.message, "warning"));
+  return true;
+}
+
+function persistSceneEdit(action, extra = {}) {
+  const scene = currentScene();
+  if (!backendOnline || !scene?.sourceVersion) return;
+  apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/scenes/${encodeURIComponent(scene.id)}/video/edit`, { method: "POST", body: JSON.stringify({ version: scene.sourceVersion, action, ...extra }) })
+    .then(() => loadBackendProject(state.projectState.id))
+    .catch(error => toast(error.message, "warning"));
+}
+
+function cropCoordinates(position) {
+  return ({ center: [0.5, 0.5], top: [0.5, 0], bottom: [0.5, 1], left: [0, 0.5], right: [1, 0.5] })[position] || [0.5, 0.5];
+}
 
 document.addEventListener("click", event => {
   const target = event.target.closest("[data-action], [data-nav]");
@@ -494,20 +617,21 @@ document.addEventListener("click", event => {
     case "select-scene": selectScene(target.dataset.sceneId); break;
     case "simulate-scenes": simulateScenes(Number(target.dataset.count)); break;
     case "run-auto-prep": runAutoPrep(); break;
-    case "mock-import": case "choose-zip": case "choose-folder": mockImport(); break;
+    case "mock-import": case "choose-zip": mockImport(); break;
+    case "choose-folder": chooseFolderPath(); break;
     case "parse-script": parseScript(); break;
     case "approve-script-mapping": approveScriptMapping(); break;
     case "approve-voice": approveVoice(); break;
-    case "approve-scene": currentScene().status = "approved"; toast("Scene approved."); savePulse(); renderScreen(); break;
-    case "reject-scene": currentScene().status = "rejected"; toast("Scene marked for replacement.", "warning"); savePulse(); renderScreen(); break;
+    case "approve-scene": if (!setBackendVideoStatus("approved")) { currentScene().status = "approved"; toast("Scene approved."); savePulse(); renderScreen(); } break;
+    case "reject-scene": if (!setBackendVideoStatus("rejected")) { currentScene().status = "rejected"; toast("Scene marked for replacement.", "warning"); savePulse(); renderScreen(); } break;
     case "approve-all": state.sceneState.items.forEach(scene => { if (scene.status === "pending") scene.status = "approved"; }); toast("Visible pending scenes approved."); renderScreen(); break;
     case "set-scene-decision": if (!state.workflowState.previewReady) { toast("Watch a preview before deciding Keep or Cut.", "warning"); break; } currentScene().decision = target.dataset.decision; markReviewDirty(); toast(`Scene ${String(currentScene().number).padStart(2, "0")} marked ${target.dataset.decision}.`); savePulse("Cut decision saved"); renderScreen(); break;
     case "keep-all-scenes": if (!state.workflowState.previewReady) { toast("Watch a preview before deciding Keep or Cut.", "warning"); break; } state.sceneState.items.forEach(scene => { scene.decision = "keep"; }); markReviewDirty(); toast("All scenes marked keep."); savePulse("Cut decisions saved"); renderScreen(); break;
     case "toggle-cut-filter": state.reviewState.showCutsOnly = !state.reviewState.showCutsOnly; renderScreen(); break;
     case "finalize-review": if (!keptScenes().length) { toast("Keep at least one scene before finalizing.", "warning"); break; } state.uiState.screen = "render"; toast(`${keptScenes().length} kept scenes ready for a new preview.`); renderScreen(); break;
     case "replace-source": currentScene().source = "Google Flow"; currentScene().sourceVersion += 1; currentScene().status = "pending"; toast("Source replacement queued (mock).", "warning"); renderScreen(); break;
-    case "toggle-hold": currentScene().edit.holdLastFrame = !currentScene().edit.holdLastFrame; markReviewDirty(); savePulse("Video edit changed"); renderInspector(); break;
-    case "toggle-duck": currentScene().sourceAudio.duck = !currentScene().sourceAudio.duck; markReviewDirty(); savePulse("Source audio changed"); renderInspector(); break;
+    case "toggle-hold": currentScene().edit.holdLastFrame = !currentScene().edit.holdLastFrame; persistSceneEdit("hold_last_frame", { enabled: currentScene().edit.holdLastFrame }); markReviewDirty(); savePulse("Video edit changed"); renderInspector(); break;
+    case "toggle-duck": currentScene().sourceAudio.duck = !currentScene().sourceAudio.duck; persistSceneEdit("source_audio", { mode: currentScene().sourceAudio.mode, volume: currentScene().sourceAudio.volume / 100, duck: currentScene().sourceAudio.duck, fade_in: currentScene().sourceAudio.fadeIn, fade_out: currentScene().sourceAudio.fadeOut }); markReviewDirty(); savePulse("Source audio changed"); renderInspector(); break;
     case "toggle-voice-override": currentScene().voiceOverride = currentScene().voiceOverride ? null : { language: state.voiceState.language, speed: state.voiceState.speed }; renderInspector(); break;
     case "voice-mode": state.voiceState.mode = target.dataset.mode; markVoiceChanged(); break;
     case "voice-gender": state.voiceState.gender = target.dataset.value; markVoiceChanged(); break;
@@ -556,12 +680,29 @@ document.addEventListener("change", event => {
   if (setting === "request-scene") state.renderState.requestScene = target.value;
   if (setting === "request-category") state.renderState.requestCategory = target.value;
   if (setting === "project-stage") { state.projectState.stage = target.value; savePulse("Project status updated"); renderScreen(); }
-  if (target.dataset.sceneSetting) { const key = target.dataset.sceneSetting; currentScene().edit[key] = key === "speed" || key === "trimStart" ? Number(target.value) : target.value; markReviewDirty(); savePulse("Video edit changed"); renderInspector(); renderTimeline(); }
-  if (target.dataset.audioSetting) { const key = target.dataset.audioSetting; currentScene().sourceAudio[key] = ["volume", "fadeIn", "fadeOut"].includes(key) ? Number(target.value) : target.value; markReviewDirty(); savePulse("Source audio changed"); renderInspector(); }
+  if (target.dataset.sceneSetting) {
+    const key = target.dataset.sceneSetting;
+    const scene = currentScene();
+    scene.edit[key] = key === "speed" || key === "trimStart" ? Number(target.value) : target.value;
+    if (key === "speed") persistSceneEdit("speed", { speed: scene.edit.speed });
+    if (key === "trimStart") persistSceneEdit("trim", { start: scene.edit.trimStart, end: scene.edit.trimEnd || scene.duration });
+    if (key === "crop" || key === "position") { const [x, y] = cropCoordinates(scene.edit.position); persistSceneEdit("crop", { mode: scene.edit.crop === "custom" ? "cover" : scene.edit.crop, x, y }); }
+    if (key === "transition") persistSceneEdit("transition", { transition: scene.edit.transition.replaceAll(" ", "_") });
+    markReviewDirty(); savePulse("Video edit changed"); renderInspector(); renderTimeline();
+  }
+  if (target.dataset.audioSetting) {
+    const key = target.dataset.audioSetting;
+    const scene = currentScene();
+    scene.sourceAudio[key] = ["volume", "fadeIn", "fadeOut"].includes(key) ? Number(target.value) : target.value;
+    persistSceneEdit("source_audio", { mode: scene.sourceAudio.mode, volume: scene.sourceAudio.volume / 100, duck: scene.sourceAudio.duck, fade_in: scene.sourceAudio.fadeIn, fade_out: scene.sourceAudio.fadeOut });
+    markReviewDirty(); savePulse("Source audio changed"); renderInspector();
+  }
 });
 
 document.addEventListener("dragover", event => { if (event.target.closest("#dropzone")) { event.preventDefault(); $("#dropzone")?.classList.add("dragging"); } });
 document.addEventListener("dragleave", event => { if (event.target.closest("#dropzone")) $("#dropzone")?.classList.remove("dragging"); });
-document.addEventListener("drop", event => { if (event.target.closest("#dropzone")) { event.preventDefault(); $("#dropzone")?.classList.remove("dragging"); mockImport(); } });
+document.addEventListener("drop", event => { if (event.target.closest("#dropzone")) { event.preventDefault(); $("#dropzone")?.classList.remove("dragging"); const file = event.dataTransfer?.files?.[0]; if (backendOnline && file) importZipFile(file); else mockImport(); } });
+$("#source-zip-input")?.addEventListener("change", event => { importZipFile(event.target.files?.[0]); event.target.value = ""; });
 
 renderScreen();
+hydrateLocalWorkspace();

@@ -15,5 +15,8 @@ export const SceneTransition = ({type}: {type: Scene['transition']}) => {
   if (type === 'paper') {
     return <AbsoluteFill style={{background: '#f2eadc', clipPath: `polygon(0 0, ${progress * 112}% 0, ${Math.max(0, progress * 112 - 12)}% 100%, 0 100%)`, opacity: 1 - progress, pointerEvents: 'none'}} />;
   }
+  if (type === 'zoom_dissolve') {
+    return <AbsoluteFill style={{background: '#142235', opacity: interpolate(progress, [0, 1], [0.92, 0]), transform: `scale(${interpolate(progress, [0, 1], [1, 1.16])})`, pointerEvents: 'none'}} />;
+  }
   return <AbsoluteFill style={{background: 'linear-gradient(90deg, #66dcf2, #ffbd45)', transform: `translateX(${interpolate(progress, [0, 1], [0, 110])}%)`, pointerEvents: 'none'}} />;
 };

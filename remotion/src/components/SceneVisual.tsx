@@ -14,7 +14,7 @@ export const SceneVisual = ({scene, projectSlug, fullBleed = false}: Props) => {
 
   const trimBefore = Math.max(0, Math.round(source.trim.start * fps));
   const trimAfter = Math.max(trimBefore + 1, Math.round(source.trim.end * fps));
-  const playbackRate = Math.min(1.1, Math.max(0.9, source.playbackRate ?? 1));
+  const playbackRate = Math.min(2, Math.max(0.5, source.playbackRate ?? 1));
   const visibleFrames = Math.max(1, Math.round((trimAfter - trimBefore) / playbackRate));
   const audio = source.sourceAudio ?? {mode: 'mute', enabled: false, volume: 0, duck_under_narration: true, fade_in: 0, fade_out: 0};
   const narrationActive = scene.subtitle.some((phrase) => frame >= phrase.startFrame && frame < phrase.endFrame);

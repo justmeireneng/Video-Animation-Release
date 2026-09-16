@@ -12,7 +12,12 @@ from typing import Any, Callable
 
 from src.services.project_state import ProjectStateService
 from src.services.scene_mapper import SceneMapper
+from src.services.studio_project import LocalProjectManager
 from src.video.scene_source_manager import SceneVideoStore
+
+
+MAX_ZIP_MEMBERS = 10_000
+MAX_ZIP_UNCOMPRESSED_BYTES = 8 * 1024 * 1024 * 1024
 
 
 class ImportService:
@@ -23,6 +28,7 @@ class ImportService:
         self.store = SceneVideoStore(self.repo_root, project_name, prober=prober) if prober else SceneVideoStore(self.repo_root, project_name)
         self.project_root = self.store.project_root
         self.state = ProjectStateService(self.project_root)
+        self.projects = LocalProjectManager(self.repo_root)
 
     def import_zip(self, zip_path: Path | str) -> dict[str, Any]:
         archive = Path(zip_path).resolve()
@@ -33,7 +39,15 @@ class ImportService:
             root = Path(temp)
             original_names: dict[Path, str] = {}
             with zipfile.ZipFile(archive) as package:
-                for index, member in enumerate(package.infolist(), 1):
+                members = package.infolist()
+                if len(members) > MAX_ZIP_MEMBERS:
+                    raise ValueError(f"ZIP has too many entries ({len(members)} > {MAX_ZIP_MEMBERS}).")
+                total_size = sum(member.file_size for member in members)
+                if total_size > MAX_ZIP_UNCOMPRESSED_BYTES:
+                    raise ValueError("ZIP uncompressed size exceeds the local import safety limit.")
+                for index, member in enumerate(members, 1):
+                    if member.flag_bits & 0x1:
+                        raise ValueError(f"Encrypted ZIP entries are not supported: {member.filename}")
                     destination = self._safe_zip_destination(root, member.filename, index)
                     if member.is_dir():
                         destination.mkdir(parents=True, exist_ok=True)
@@ -66,9 +80,14 @@ class ImportService:
 
     def _import_folder(self, folder: Path, source_label: str,
                        original_names: dict[Path, str] | None = None) -> dict[str, Any]:
-        project = json.loads(self.store.remotion_path.read_text(encoding="utf-8"))
-        mapping = SceneMapper.scene_map(project)
         found, unmatched = SceneMapper.scan(folder)
+        project = json.loads(self.store.remotion_path.read_text(encoding="utf-8"))
+        # New desktop projects start without pre-authored scene slots.  Build
+        # those slots directly from the numeric Flow filenames, preserving
+        # gaps so the user can review missing source scenes explicitly.
+        if (self.project_root / "project.json").is_file() and found:
+            project = self.projects.ensure_scene_slots(self.project_name, [item.number for item in found])
+        mapping = SceneMapper.scene_map(project)
         counts = Counter(item.number for item in found)
         records: list[dict[str, Any]] = []
         invalid: list[dict[str, str]] = []
@@ -125,4 +144,14 @@ class ImportService:
         report["report_path"] = str(report_path)
         self.state.set("MAPPED", f"Imported {len(records)} source versions")
         self.state.set("READY" if records and not invalid else "NEEDS_CHANGES", "Review pending source versions")
+        if (self.project_root / "project.json").is_file():
+            manifest = self.projects.load(self.project_name)
+            manifest["source"] = {
+                **dict(manifest.get("source") or {}),
+                "imported": bool(records),
+                "last_import": report_path.relative_to(self.project_root).as_posix(),
+                "scene_count": len(mapping),
+            }
+            manifest["status"] = "SCRIPT_MAPPING" if records else "NEEDS_CHANGES"
+            self.projects.save(self.project_name, manifest)
         return report
