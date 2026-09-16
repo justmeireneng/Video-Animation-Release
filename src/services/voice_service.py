@@ -33,6 +33,11 @@ class VoiceConfig:
     language: str = "vi"
     speed: float = 1.0
     engine: str | None = None
+    base_url: str | None = None
+    timeout_seconds: float | None = None
+    # API keys are runtime-only. They are accepted programmatically or through
+    # VOICESTUDIO_API_KEY, never loaded from or written to project JSON.
+    api_key: str | None = field(default=None, repr=False)
     design: dict[str, Any] = field(default_factory=dict)
     reference_audio: Path | str | None = None
     selected_preview: str | None = None
@@ -45,7 +50,8 @@ class VoiceConfig:
         voice = project_data.get("voice")
         if isinstance(voice, dict):
             known = {
-                "provider", "mode", "voice_id", "language", "speed", "engine", "design", "reference_audio",
+                "provider", "mode", "voice_id", "language", "speed", "engine", "base_url", "timeout_seconds",
+                "api_key", "design", "reference_audio",
                 "selected_preview", "approval_required", "approved",
             }
             return cls(
@@ -55,6 +61,8 @@ class VoiceConfig:
                 language=str(voice.get("language") or project_data.get("language") or "vi"),
                 speed=float(voice.get("speed", 1.0)),
                 engine=str(voice["engine"]) if voice.get("engine") else None,
+                base_url=str(voice["base_url"]) if voice.get("base_url") else None,
+                timeout_seconds=float(voice["timeout_seconds"]) if voice.get("timeout_seconds") is not None else None,
                 design=dict(voice.get("design") or {}),
                 reference_audio=voice.get("reference_audio"),
                 selected_preview=str(voice["selected_preview"]) if voice.get("selected_preview") else None,
@@ -77,11 +85,24 @@ class VoiceConfig:
         )
 
     def provider_options(self) -> dict[str, Any]:
-        result = dict(self.options)
+        result = self.safe_options()
         result.update({"mode": self.mode, "speed": self.speed, "design": self.design})
         if self.engine:
             result["engine"] = self.engine
         return result
+
+    def safe_options(self) -> dict[str, Any]:
+        secret_names = {"api_key", "authorization", "remote_api_key", "voicestudio_api_key"}
+        return {key: value for key, value in self.options.items() if key.lower() not in secret_names}
+
+    def provider_configuration(self) -> dict[str, Any]:
+        if self.provider != "voicestudio_remote":
+            return {}
+        return {
+            "base_url": self.base_url,
+            "api_key": self.api_key,
+            "timeout_seconds": self.timeout_seconds,
+        }
 
     def to_dict(self) -> dict[str, Any]:
         result = {
@@ -92,12 +113,14 @@ class VoiceConfig:
             "design": dict(self.design),
             "speed": self.speed,
             "engine": self.engine,
+            "base_url": self.base_url,
+            "timeout_seconds": self.timeout_seconds,
             "reference_audio": str(self.reference_audio) if self.reference_audio else None,
             "selected_preview": self.selected_preview,
             "approval_required": self.approval_required,
             "approved": self.approved,
         }
-        result.update(self.options)
+        result.update(self.safe_options())
         return result
 
 
@@ -129,6 +152,7 @@ class VoiceService:
         self.registry = registry or ProviderRegistry()
         self.fallback = fallback
         self.last_warning: str | None = None
+        self.last_metrics: dict[str, Any] | None = None
         self._resolutions: dict[str, Any] = {}
 
     def _reference_path(self, reference_audio: Path | str | None) -> Path | None:
@@ -162,16 +186,21 @@ class VoiceService:
             "age": design.get("age"),
             "pitch": design.get("pitch") or config.options.get("pitch"),
             "speed": config.speed,
+            "base_url": config.base_url if config.provider == "voicestudio_remote" else None,
             "text": text,
             "reference_audio_hash": self._reference_hash(config.reference_audio),
-            "options": config.options,
+            "options": config.safe_options(),
         }
         canonical = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"), default=str)
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     def synthesize(self, text: str, config: VoiceConfig, output_path: Path | str) -> VoiceSynthesisResult:
-        if config.provider not in self._resolutions:
-            self._resolutions[config.provider] = self.registry.resolve(config.provider, fallback=self.fallback)
+        if config.provider == "voicestudio_remote" or config.provider not in self._resolutions:
+            self._resolutions[config.provider] = self.registry.resolve(
+                config.provider,
+                fallback=self.fallback,
+                configuration=config.provider_configuration(),
+            )
         resolution = self._resolutions[config.provider]
         self.last_warning = resolution.warning
         key = self.cache_key(text, config, selected_provider=resolution.selected_provider)
@@ -185,6 +214,7 @@ class VoiceService:
                 shutil.copy2(cached_audio, output)
             metadata = json.loads(cached_metadata.read_text(encoding="utf-8"))
             metadata.update({"audio_file": output, "cache_hit": True})
+            self.last_metrics = {"cache_hit": True}
             return VoiceSynthesisResult(**metadata)
 
         temp_audio = self.cache_root / f"{key}.generating.wav"
@@ -201,6 +231,7 @@ class VoiceService:
             options=config.provider_options(),
         )
         result = resolution.provider.synthesize(request)
+        self.last_metrics = getattr(resolution.provider, "last_metrics", None)
         generated = Path(result.audio_file)
         generated.replace(cached_audio)
         result.audio_file = output

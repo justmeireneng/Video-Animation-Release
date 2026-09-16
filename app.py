@@ -254,9 +254,11 @@ def main():
 
     voice_preview = subparsers.add_parser("voice-preview", help="Generate a short voice preview without video")
     voice_preview.add_argument("project_name")
-    voice_preview.add_argument("--provider", choices=["omnivoice", "voicestudio"])
+    voice_preview.add_argument("--provider", choices=["omnivoice", "voicestudio_remote"])
     voice_preview.add_argument("--engine")
     voice_preview.add_argument("--voice-id")
+    voice_preview.add_argument("--remote-base-url", help="Remote VoiceStudio HTTPS/HTTP URL; localhost is rejected")
+    voice_preview.add_argument("--timeout-seconds", type=float, help="Remote request timeout; default is 180 seconds")
     voice_preview.add_argument("--text")
     voice_preview.add_argument("--out")
 
@@ -349,6 +351,10 @@ def main():
             voice_config.engine = args.engine
         if args.voice_id:
             voice_config.voice_id = args.voice_id
+        if args.remote_base_url:
+            voice_config.base_url = args.remote_base_url
+        if args.timeout_seconds is not None:
+            voice_config.timeout_seconds = args.timeout_seconds
         voice_service = VoiceService(project_root)
         if args.text:
             result = voice_service.generate_voice_preview(voice_config, args.text, args.out)
@@ -356,6 +362,7 @@ def main():
             result = voice_service.generate_voice_preview(voice_config, output_path=args.out)
         preview_report = result.to_dict()
         preview_report["warning"] = voice_service.last_warning
+        preview_report["metrics"] = voice_service.last_metrics
         _print_video_record(preview_report)
     elif args.command == "voice-control":
         control = VoiceControlService(ROOT_DIR / "projects" / args.project_name)

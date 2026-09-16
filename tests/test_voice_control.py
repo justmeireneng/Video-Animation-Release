@@ -79,8 +79,8 @@ class DesignProvider(VoiceProvider):
 
 
 class UnavailableProvider(DesignProvider):
-    provider_id = "voicestudio"
-    display_name = "VoiceStudio"
+    provider_id = "voicestudio_remote"
+    display_name = "VoiceStudio Remote"
 
     def is_available(self):
         return False
@@ -101,7 +101,7 @@ class TestVoiceControl(unittest.TestCase):
             "scenes": [{"id": "scene_01", "narration": "Xin chào"}],
         }), encoding="utf-8")
         design = DesignProvider()
-        registry = ProviderRegistry({"omnivoice": lambda: design, "voicestudio": UnavailableProvider})
+        registry = ProviderRegistry({"omnivoice": lambda: design, "voicestudio_remote": UnavailableProvider})
         return VoiceControlService(project, registry=registry), design
 
     def test_ui_contract_hides_unsupported_age_and_clone_and_has_audio_player(self):
@@ -113,9 +113,11 @@ class TestVoiceControl(unittest.TestCase):
             self.assertFalse(contract["controls"]["age"]["visible"])
             self.assertNotIn("voice_clone", contract["controls"]["mode"]["options"])
             page = voice_control_page(control)
-            self.assertIn("VoiceStudio — Not Available", page)
+            self.assertIn("VoiceStudio Remote — Configure Remote", page)
             self.assertIn('<audio id="active-preview" controls', page)
             self.assertIn("Generate 4 comparisons", page)
+            self.assertIn("Server URL", page)
+            self.assertIn("Test Connection", page)
 
     def test_voice_form_decodes_vietnamese_as_utf8(self):
         expected = VOICE_PREVIEW_TEXT

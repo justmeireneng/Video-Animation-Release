@@ -36,11 +36,13 @@ def voice_control_page(control: VoiceControlService, message: str = "") -> str:
     providers = contract["providers"]
     active = next((item for item in providers if item["provider_id"] == state["voiceProvider"]), providers[0])
     caps = active["capabilities"]
+    remote_active = state["voiceProvider"] == "voicestudio_remote"
     provider_options = "".join(
         f'<option value="{html.escape(item["provider_id"])}" '
         f'{"selected" if item["provider_id"] == state["voiceProvider"] else ""} '
-        f'{"" if item["available"] else "disabled"}>{html.escape(item["display_name"])}'
-        f'{"" if item["available"] else " — Not Available"}</option>'
+        f'{"" if item["available"] or item["provider_id"] == "voicestudio_remote" else "disabled"}>'
+        f'{html.escape(item["display_name"])}'
+        f'{"" if item["available"] else (" — Configure Remote" if item["provider_id"] == "voicestudio_remote" else " — Not Available")}</option>'
         for item in providers
     )
     mode_options = "".join(
@@ -52,6 +54,12 @@ def voice_control_page(control: VoiceControlService, message: str = "") -> str:
         f'{"selected" if str(item.get("voice_id")) == str(state.get("voiceId")) else ""}>'
         f'{html.escape(str(item.get("name") or item.get("voice_id")))}</option>'
         for item in active.get("voices", [])
+    )
+    engine_options = '<option value="">Remote active engine</option>' + "".join(
+        f'<option value="{html.escape(str(item.get("engine_id") or item.get("id") or ""))}" '
+        f'{"selected" if str(item.get("engine_id") or item.get("id")) == str(state.get("engine")) else ""}>'
+        f'{html.escape(str(item.get("name") or item.get("engine_id") or item.get("id") or ""))}</option>'
+        for item in active.get("engines", [])
     )
     profile_options = '<option value="">No reusable profile</option>' + "".join(
         f'<option value="{html.escape(item["profile_id"])}">{html.escape(item["name"])}</option>'
@@ -81,6 +89,8 @@ select,input,textarea,button{{box-sizing:border-box;width:100%;border:1px solid 
 <div id="age-wrap" class="{"" if state["voiceMode"]=="voice_design" and caps.get("age") else "hidden"}"><label>Age</label><select name="age" id="age"><option {"selected" if state["age"]=="young adult" else ""}>young adult</option><option {"selected" if state["age"]=="middle-aged" else ""}>middle-aged</option><option {"selected" if state["age"]=="older adult" else ""}>older adult</option></select></div>
 <div id="pitch-wrap" class="{"" if state["voiceMode"]=="voice_design" and caps.get("pitch") else "hidden"}"><label>Pitch</label><select name="pitch" id="pitch"><option value="low" {"selected" if state["pitch"]=="low" else ""}>Low</option><option value="moderate" {"selected" if state["pitch"]=="moderate" else ""}>Moderate</option><option value="high" {"selected" if state["pitch"]=="high" else ""}>High</option></select></div>
 <label>Speed · <span id="speed-label">{float(state["speed"]):.2f}x</span></label><input type="range" name="speed" id="speed" min="0.85" max="1.20" step="0.01" value="{float(state["speed"]):.2f}">
+<div id="remote-wrap" class="{"" if remote_active else "hidden"}"><label>Server URL</label><input type="url" name="remote_base_url" value="{html.escape(str(state.get("remoteBaseUrl") or ""))}" placeholder="https://voice.example.com"><label>API Key</label><input type="password" name="remote_api_key" autocomplete="off" placeholder="Not saved; or use VOICESTUDIO_API_KEY"><button type="submit" formaction="/test-remote" class="secondary">Test Connection</button><p class="muted">Remote only: endpoint must not be localhost. The key is never saved in project files.</p></div>
+<div id="engine-wrap" class="{"" if remote_active and caps.get("engine_discovery") else "hidden"}"><label>TTS Engine</label><select name="engine" id="engine">{engine_options}</select></div>
 <label>Voice profile</label><select id="profile">{profile_options}</select><label>Provider voice</label><select name="voice_id" id="voice-id">{voice_options}</select>
 <div id="reference-wrap" class="{"" if state["voiceMode"]=="voice_clone" and caps.get("reference_audio") else "hidden"}"><label>Clone reference audio</label><input type="file" name="reference_audio" accept="audio/*"></div>
 <label>Preview text</label><textarea name="preview_text">{html.escape(state["previewText"])}</textarea><button>Generate Preview</button></form>
@@ -142,7 +152,7 @@ def serve_voice_control(control: VoiceControlService, port: int = 8822, open_bro
 
         def do_POST(self) -> None:  # noqa: N802
             try:
-                if self.path == "/generate":
+                if self.path in {"/generate", "/test-remote"}:
                     fields = self._multipart()
                     values = {key: _form_text(part) for key, part in fields.items() if key != "reference_audio"}
                     reference = fields.get("reference_audio")
@@ -159,9 +169,20 @@ def serve_voice_control(control: VoiceControlService, port: int = 8822, open_bro
                         provider=values["provider"], mode=values["mode"], gender=values.get("gender", "male"),
                         age=values.get("age", "young adult"), pitch=values.get("pitch", "moderate"),
                         speed=float(values["speed"]), voice_id=values.get("voice_id") or None,
+                        engine=values.get("engine") or None, remote_base_url=values.get("remote_base_url") or None,
                         preview_text=values["preview_text"],
                     )
-                    result = control.generate_preview(output_path=control.preview_root / "custom_preview.wav")
+                    if self.path == "/test-remote":
+                        report = control.test_remote_connection(
+                            values.get("remote_base_url") or None, values.get("remote_api_key") or None,
+                        )
+                        status = report.get("status", "error")
+                        self.redirect(f"Remote connection: {status}")
+                        return
+                    result = control.generate_preview(
+                        output_path=control.preview_root / "custom_preview.wav",
+                        api_key=values.get("remote_api_key") or None,
+                    )
                     self.redirect(f"Preview ready: {result.duration:.3f}s")
                     return
                 length = int(self.headers.get("Content-Length", "0"))

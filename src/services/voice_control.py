@@ -35,8 +35,11 @@ class VoiceControlState:
     age: str = "young adult"
     pitch: str = "moderate"
     speed: float = 1.10
+    engine: str | None = None
     voiceId: str | None = None
     referenceAudio: str | None = None
+    remoteBaseUrl: str | None = None
+    remoteStatus: str = "disconnected"
     previewText: str = VOICE_PREVIEW_TEXT
     previewStatus: str = "idle"
     previewFile: str | None = None
@@ -71,8 +74,10 @@ class VoiceControlService:
             age=str(design.get("age") or "young adult"),
             pitch=str(design.get("pitch") or "moderate"),
             speed=config.speed if config.selected_preview else 1.10,
+            engine=config.engine,
             voiceId=config.voice_id,
             referenceAudio=str(config.reference_audio) if config.reference_audio else None,
+            remoteBaseUrl=config.base_url,
             selectedPreview=config.selected_preview,
         )
 
@@ -81,17 +86,25 @@ class VoiceControlService:
         self.state_path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return payload
 
-    def _provider(self, provider_id: str):
+    def _provider(self, config: VoiceConfig, *, require_available: bool = True):
         try:
-            provider = self.registry.get(provider_id)
-        except KeyError as exc:
+            provider = self.registry.resolve(
+                config.provider,
+                fallback=False,
+                configuration=config.provider_configuration(),
+                require_available=False,
+            ).provider
+        except (KeyError, RuntimeError) as exc:
             raise VoiceControlError(str(exc)) from exc
-        if not provider.is_available():
-            raise VoiceControlError(f"Voice provider '{provider_id}' is not available.")
+        if require_available and not provider.is_available():
+            health = provider.health_check()
+            detail = health.get("detail")
+            suffix = f" {detail}" if detail else ""
+            raise VoiceControlError(f"Voice provider '{config.provider}' is not available.{suffix}")
         return provider
 
-    def validate(self, config: VoiceConfig) -> dict[str, Any]:
-        provider = self._provider(config.provider)
+    def validate(self, config: VoiceConfig, *, require_available: bool = True) -> dict[str, Any]:
+        provider = self._provider(config, require_available=require_available)
         capabilities = provider.capabilities()
         if config.mode not in VALID_MODES:
             raise VoiceControlError(f"Unsupported voice mode: {config.mode}")
@@ -144,7 +157,7 @@ class VoiceControlService:
         path = Path(value)
         return path if path.is_absolute() else self.project_root / path
 
-    def config_from_state(self) -> VoiceConfig:
+    def config_from_state(self, *, api_key: str | None = None) -> VoiceConfig:
         provider = self.registry.get(self.state.voiceProvider)
         capabilities = provider.capabilities()
         design: dict[str, Any] = {}
@@ -161,14 +174,31 @@ class VoiceControlService:
             voice_id=self.state.voiceId,
             language="vi",
             speed=self.state.speed,
+            engine=self.state.engine,
             design=design,
             reference_audio=self.state.referenceAudio,
+            base_url=self.state.remoteBaseUrl,
+            api_key=api_key,
             approval_required=True,
             approved=False,
         )
 
     def ui_contract(self) -> dict[str, Any]:
         providers = self.registry.catalog()
+        if self.state.voiceProvider == "voicestudio_remote":
+            config = self.config_from_state()
+            provider = self._provider(config, require_available=False)
+            health = provider.health_check()
+            for item in providers:
+                if item["provider_id"] == "voicestudio_remote":
+                    item.update({
+                        "available": health.get("available"),
+                        "status": health.get("status", "remote_unreachable"),
+                        "capabilities": provider.capabilities(),
+                        "voices": provider.list_voices() if health.get("available") else [],
+                        "engines": provider.list_engines() if health.get("available") else [],
+                    })
+                    break
         active = next((item for item in providers if item["provider_id"] == self.state.voiceProvider), providers[0])
         caps = active["capabilities"]
         mode = self.state.voiceMode
@@ -182,11 +212,19 @@ class VoiceControlService:
                 "age": {"options": sorted(VALID_AGES), "visible": mode == "voice_design" and bool(caps.get("age"))},
                 "pitch": {"options": ["low", "moderate", "high"], "visible": mode == "voice_design" and bool(caps.get("pitch"))},
                 "speed": {"range": caps.get("speed_range", {"min": 0.85, "max": 1.20, "step": 0.01}), "presets": SPEED_PRESETS},
+                "engine": {"options": active.get("engines", []), "visible": bool(caps.get("engine_discovery"))},
                 "voiceProfile": {"options": active.get("voices", []), "visible": bool(active.get("voices"))},
                 "referenceAudio": {"visible": mode == "voice_clone" and bool(caps.get("reference_audio"))},
+                "remoteConnection": {
+                    "visible": self.state.voiceProvider == "voicestudio_remote",
+                    "baseUrl": self.state.remoteBaseUrl,
+                    "status": self.state.remoteStatus,
+                    "apiKeyStorage": "transient_form_or_VOICESTUDIO_API_KEY",
+                },
             },
             "actions": [
-                "setVoiceProvider", "setVoiceMode", "setGender", "setAge", "setPitch", "setSpeed",
+                "setVoiceProvider", "setVoiceMode", "setGender", "setAge", "setPitch", "setSpeed", "setEngine",
+                "setRemoteServer", "testRemoteConnection",
                 "chooseReferenceAudio", "generatePreview", "playPreview", "selectPreview", "approveVoice",
                 "regenerateNarration",
             ],
@@ -203,7 +241,8 @@ class VoiceControlService:
     def update_state(self, **changes: Any) -> dict[str, Any]:
         aliases = {
             "provider": "voiceProvider", "mode": "voiceMode", "voice_id": "voiceId",
-            "reference_audio": "referenceAudio", "preview_text": "previewText",
+            "reference_audio": "referenceAudio", "preview_text": "previewText", "engine": "engine",
+            "remote_base_url": "remoteBaseUrl",
         }
         previous = VoiceControlState(**asdict(self.state))
         try:
@@ -212,7 +251,8 @@ class VoiceControlService:
                 if field_name not in VoiceControlState.__dataclass_fields__:
                     raise VoiceControlError(f"Unknown voice state field: {key}")
                 setattr(self.state, field_name, value)
-            self.validate(self.config_from_state())
+            config = self.config_from_state()
+            self.validate(config, require_available=config.provider != "voicestudio_remote")
         except Exception:
             self.state = previous
             raise
@@ -231,8 +271,20 @@ class VoiceControlService:
         self._save_state()
         return self.state.referenceAudio
 
-    def generate_preview(self, *, output_path: Path | str | None = None):
-        config = self.config_from_state()
+    def test_remote_connection(self, base_url: str | None, api_key: str | None = None) -> dict[str, Any]:
+        self.update_state(provider="voicestudio_remote", mode="auto", remote_base_url=base_url or None)
+        config = self.config_from_state(api_key=api_key or None)
+        provider = self._provider(config, require_available=False)
+        test_connection = getattr(provider, "test_connection", None)
+        if not callable(test_connection):
+            raise VoiceControlError("Selected provider does not implement remote connection testing.")
+        report = test_connection()
+        self.state.remoteStatus = str(report.get("status") or "error")
+        self._save_state()
+        return report
+
+    def generate_preview(self, *, output_path: Path | str | None = None, api_key: str | None = None):
+        config = self.config_from_state(api_key=api_key or None)
         self.validate(config)
         self.state.previewStatus = "generating"
         self._save_state()
@@ -245,6 +297,8 @@ class VoiceControlService:
             self._save_state()
             raise
         self.state.previewStatus = "complete"
+        if config.provider == "voicestudio_remote":
+            self.state.remoteStatus = "ready"
         self.state.previewFile = str(result.audio_file)
         self._save_state()
         return result

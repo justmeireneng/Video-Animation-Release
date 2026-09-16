@@ -1,92 +1,85 @@
 # Voice providers
 
-Audit snapshot: 2026-09-15. This document describes the integration boundary used by this project; it is not legal advice.
+Audit snapshot: 2026-09-16. This document describes the integration boundary used by this project; it is not legal advice.
 
 ## Architecture
 
-`omnivoice` remains `default_voice_provider`. Project-specific selection lives in `projects/<name>/narration.json`:
+`omnivoice` remains `default_voice_provider`. It is the local default and continues to use the existing Edge TTS-backed adapter. `voicestudio_remote` is an opt-in HTTP/HTTPS client only:
+
+```text
+Local AI Video Studio -- HTTPS / private overlay --> Remote VoiceStudio backend
+                                                   --> remote TTS engine/model
+                                                   --> WAV response --> local audio cache
+```
+
+The local project never installs, starts, launches, or downloads VoiceStudio models. It only sends text/configuration to an explicitly configured remote endpoint, receives audio, and caches that output under the project.
+
+`VoiceProvider` normalizes synthesis to `audio_file`, `provider`, `voice_id`, `language`, `duration`, `sample_rate`, and optional `timing`. Remote request metrics are reported separately: time to first response, download time, total request time, returned synthesis time when the server exposes it, audio duration, and output size.
+
+The cache key includes provider, **remote base URL**, engine, voice, mode, gender, age, pitch, speed, text, and reference-audio hash. It deliberately excludes secrets, video, crop, transition, and subtitle-position changes. `.voice-cache/`, `.voice-preview/`, and Voice Control state are generated and ignored by Git.
+
+## OmniVoice
+
+- Provider ID: `omnivoice` (default).
+- Current behavior is retained: Vietnamese Edge TTS fallback, preset male/female voices, native rate and pitch controls.
+- No VoiceStudio source, model, runtime, virtual environment, Docker image, or local backend is required.
+
+## VoiceStudio Remote
+
+- Provider ID: `voicestudio_remote`.
+- Remote API: `GET /health`, `GET /v1/audio/voices`, and OpenAI-compatible `POST /v1/audio/speech`.
+- Configuration:
 
 ```json
 {
   "voice": {
-    "provider": "omnivoice",
-    "mode": "auto",
-    "voice_id": "vi-VN-NamMinhNeural",
-    "language": "vi-VN",
-    "speed": 0.92,
-    "engine": null,
-    "design": {"gender": "male", "age": null, "pitch": null}
+    "provider": "voicestudio_remote",
+    "base_url": "https://voice.example.net",
+    "timeout_seconds": 180,
+    "engine": "tts-1",
+    "voice_id": "remote-profile-id",
+    "language": "vi",
+    "speed": 1.12
   }
 }
 ```
 
-`VoiceProvider` normalizes synthesis to `audio_file`, `provider`, `voice_id`, `language`, `duration`, `sample_rate`, and optional `timing`. `ProviderRegistry` imports only the selected provider. A missing optional provider is reported and falls back explicitly to OmniVoice; startup never downloads models or starts an external service.
+- Set the secret outside project files: `VOICESTUDIO_API_KEY`. The adapter sends it only as `Authorization: Bearer <key>` and never writes it to project JSON, cache metadata, logs, or Git.
+- Set `VOICESTUDIO_BASE_URL` and optional `VOICESTUDIO_TIMEOUT_SECONDS` when a project does not specify the endpoint.
+- `localhost`, `.localhost`, `127.0.0.1`, and `::1` are rejected so the integration cannot accidentally use a local VoiceStudio service.
+- Voice profiles and engines are discovered from the remote runtime; the app does not copy an engine list from the README.
+- Voice cloning uses a saved **remote** profile ID. Uploading a local reference file to this API is not supported.
+- Voice design is engine-dependent. The remote API accepts its documented free-form `description`, but this app hides generic gender/age/pitch controls until a remote engine explicitly reports compatible capabilities.
 
-The cache key contains provider, runtime engine/model, voice ID, mode, gender, age, pitch, speed, text, and reference-audio SHA-256. Video, crop, transition, and subtitle-position changes are deliberately excluded. `.voice-cache/` and `.voice-preview/` are generated and ignored by Git.
+### Connection security
 
-Commands:
+Use HTTPS or an encrypted private overlay such as Tailscale. Plain HTTP is acceptable only on a trusted private network because Bearer credentials are otherwise visible in transit. On the remote machine, set `OMNIVOICE_API_KEY`; upstream documents that remote direct clients use the `Authorization: Bearer` header. Do not expose port 3900 unauthenticated or put the key in a URL.
+
+The Voice Control panel exposes a Remote Server URL, transient API Key field, and **Test Connection** action. The key is sent only for that request/preview and is not persisted. For repeated CLI use, use `VOICESTUDIO_API_KEY` instead of command-line flags or checked-in configuration.
+
+## Commands
 
 ```powershell
 python app.py voice-providers
 python app.py voice-preview Atlantic_Ocean_Explainer
-python app.py voice-preview Atlantic_Ocean_Explainer --provider voicestudio --engine tts-1
+python app.py voice-preview Atlantic_Ocean_Explainer --provider voicestudio_remote --remote-base-url https://voice.example.net --engine tts-1
 python app.py voice-control Atlantic_Ocean_Explainer
-python app.py generate-voice-comparisons Atlantic_Ocean_Explainer
-python app.py select-voice-preview Atlantic_Ocean_Explainer female_1.12
-python app.py approve-voice Atlantic_Ocean_Explainer
-python app.py regenerate-approved-narration Atlantic_Ocean_Explainer
 ```
 
-## Voice control and approval gate
+`voice-control` generates previews only; it never renders video. Remote failure is explicit and does not silently switch to OmniVoice. The project can always be switched back to `omnivoice`.
 
-The local voice panel exposes provider, provider-supported modes and controls, native speed from 0.85x to 1.20x, reusable profiles, preview text, audio playback, comparison selection, and approval. Its state contract uses `voiceProvider`, `voiceMode`, `gender`, `age`, `pitch`, `speed`, `voiceId`, `referenceAudio`, `previewText`, `previewStatus`, `previewFile`, and `selectedPreview`.
+## Disposable remote test choices
 
-OmniVoice's current EdgeTTS-backed adapter implements gender through the two reported Vietnamese preset voices, pitch through native Edge prosody, and speed through native speaking rate. Age design and voice clone remain hidden because this adapter does not implement them. The comparison manifest records `age_control_applied: false` rather than claiming a synthetic age that was not requested from the engine.
+1. A temporary GPU VM or RunPod instance behind Tailscale Serve is the most direct disposable test: run the pinned VoiceStudio backend remotely, select one engine, test previews, then stop the instance.
+2. A cloud VM or private remote Docker host works the same way; keep port 3900 private behind TLS/reverse proxy or an encrypted overlay.
+3. Google Colab or GitHub Codespaces can be used for experiments only after you provide a private authenticated endpoint. Do not expose an unauthenticated notebook tunnel to the public internet.
 
-Selecting a preview updates only the project's `voice` config and sets `approved: false`. Full narration synthesis is blocked while `approval_required` is true and approval is false. Approval still does not render video; the separate narration action regenerates WAVs, phrase subtitle timing, scene duration, and non-destructive source-video timing projections. Imported Flow clips and storyboard content are retained.
+The remote deployment, engine weights, compute, and model-license obligations belong to that remote environment. This repository remains a thin client.
 
-The current OmniVoice adapter delegates to Microsoft Edge TTS, so preview/narration text is sent to that external service during synthesis. Cached results stay local. VoiceStudio traffic goes only to its configured service URL.
+## Licensing
 
-## OmniVoice
+- VoiceStudio application code is AGPL-3.0-only. Running it as a remote service may carry AGPL source-offer obligations; obtain legal review before proprietary distribution or network operation.
+- VoiceStudio engines and downloaded model weights retain their own terms. The VoiceStudio application license does not relicense them.
+- OmniVoice upstream code is Apache-2.0, while its published weights have separate CC-BY-NC and tokenizer terms. Review all applicable terms before commercial use.
 
-- Upstream: <https://github.com/k2-fsa/OmniVoice>
-- This project's existing adapter is unchanged: it delegates synthesis to the existing EdgeTTS fallback when local OmniVoice weights are not loaded.
-- The adapter currently supports multilingual synthesis, explicit male/female voice IDs, speed, and pitch. It does **not** implement upstream OmniVoice cloning, voice design, age control, or direct reference audio, so these are reported as unsupported.
-- Upstream OmniVoice supports 600+ languages, zero-shot cloning, and voice design, but those features are not claimed by this adapter until wired and tested.
-- Upstream code is Apache-2.0. The official model card states that the pretrained weights are CC-BY-NC because of training-data constraints: <https://huggingface.co/k2-fsa/OmniVoice>. That non-commercial weight license is separate from the code license and must be reviewed before commercial/proprietary use.
-
-## VoiceStudio
-
-- Upstream: <https://github.com/debpalash/VoiceStudio>
-- Integration method: optional, separately running local service via `GET /health`, `GET /v1/audio/voices`, and OpenAI-compatible `POST /v1/audio/speech`. No VoiceStudio source or models are vendored into this repository.
-- Configuration: `VOICESTUDIO_BASE_URL` (default `http://127.0.0.1:3900`) and optional `VOICESTUDIO_API_KEY`. `OMNIVOICE_API_KEY` is also honored because that is the upstream remote-server setting.
-- Runtime engine IDs and saved voice profiles are discovered from `GET /v1/audio/voices`; no README engine list is copied into code. `tts-1` selects VoiceStudio's active engine. Voice design is engine-dependent. Cloning through this adapter uses a voice profile previously created in VoiceStudio; the OpenAI-compatible speech endpoint does not accept a raw reference upload.
-- VoiceStudio has native batch/dubbing flows. This project keeps its existing narration strategy and provides provider-neutral `queued`, `generating`, `complete`, and `failed` scene states instead of copying VoiceStudio's UI or queue implementation.
-
-### Runtime audit
-
-- The backend is FastAPI/Uvicorn and exposes REST, SSE/WebSocket features, an OpenAI-compatible audio API, and an MCP shim. The adapter uses only the stable REST audio boundary.
-- Current source declares Python 3.11+ and a large ML stack including PyTorch/torchaudio/torchvision, Transformers, Accelerate, Whisper-related packages, FastAPI, and engine-specific optional extras. These remain outside core requirements.
-- Desktop/source development uses Bun/Node for the React frontend and Rust/Cargo for Tauri. They are not required when this project talks to an already running backend.
-- The desktop distribution manages its own Python environment and model downloads. First launch/default-engine setup can download weights; this project never triggers installation or model downloads automatically.
-- Windows 10 21H2+/11 x64 is supported. NVIDIA acceleration is optional; upstream documents CPU operation and notes Windows AMD GPU runs CPU-only. Practical accelerated use starts around 4 GB VRAM, 8 GB+ is recommended for the default path, and heavier engines may need 12–16 GB. CPU synthesis can be slow.
-- VoiceStudio caches one engine instance and evicts other TTS engines during generation; it also has idle unloading. This project does not call admin unload endpoints because the external service owns its memory lifecycle.
-
-Primary audit sources: [README](https://github.com/debpalash/VoiceStudio/blob/main/README.md), [Windows install guide](https://github.com/debpalash/VoiceStudio/blob/main/docs/install/windows.md), [Python project metadata](https://github.com/debpalash/VoiceStudio/blob/main/pyproject.toml), [API authentication](https://github.com/debpalash/VoiceStudio/blob/main/docs/api-auth.md), and [OpenAI-compatible router](https://github.com/debpalash/VoiceStudio/blob/main/backend/api/routers/openai_compat.py).
-
-### License and packaging implications
-
-- VoiceStudio application code is **AGPL-3.0-only**, not MIT or Apache. Its notice says the scope includes the Tauri shell, React frontend, FastAPI backend, and scripts: <https://github.com/debpalash/VoiceStudio/blob/main/LICENSE-NOTICE.md>.
-- Running an unmodified, user-installed VoiceStudio service beside this project is the intentionally narrow integration boundary. If a product distributes, embeds, modifies, or operates VoiceStudio as a network service, AGPL source-offer/corresponding-source obligations may apply. Obtain legal review before proprietary packaging; a commercial VoiceStudio license may be available upstream.
-- VoiceStudio's bundled OmniVoice code has separate Apache-2.0 terms, while its default OmniVoice weights are CC-BY-NC and its tokenizer has additional upstream terms. Other engines/models retain their own licenses. A commercial application license does not automatically relicense third-party weights.
-
-## Setup boundary
-
-Install and run VoiceStudio using its official instructions, then verify:
-
-```powershell
-$env:VOICESTUDIO_BASE_URL = "http://127.0.0.1:3900"
-python app.py voice-providers
-```
-
-When VoiceStudio is absent, the catalog shows it as not installed/running and the Atlantic project continues with `omnivoice`.
+Primary API audit sources: [VoiceStudio API authentication](https://github.com/debpalash/VoiceStudio/blob/main/docs/api-auth.md), [remote GPU guide](https://github.com/debpalash/VoiceStudio/blob/main/docs/remote-gpu.md), and [OpenAI-compatible router](https://github.com/debpalash/VoiceStudio/blob/main/backend/api/routers/openai_compat.py).
