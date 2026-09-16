@@ -132,6 +132,7 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .metric-card.blue .metric-meta { color: var(--blue); }
 
 .workflow { display: grid; grid-template-columns: repeat(5, 1fr); gap: 0; overflow: hidden; }
+.workflow.workflow-six { grid-template-columns: repeat(6, minmax(0, 1fr)); }
 .workflow-step { position: relative; min-height: 90px; padding: 13px 11px; border-right: 1px solid var(--line-soft); background: rgb(12 16 24 / 30%); }
 .workflow-step:last-child { border: 0; }
 .workflow-step::after { position: absolute; content: ""; left: 15px; bottom: 0; width: calc(100% - 30px); height: 2px; background: var(--line); }

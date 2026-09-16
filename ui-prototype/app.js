@@ -39,8 +39,8 @@ const VOICE_CAPABILITIES = {
 const DEFAULT_NARRATION = "Dự án này bắt đầu bằng bối cảnh rõ ràng, sau đó dẫn người xem qua các ý chính theo từng cảnh có thể kiểm soát độc lập.";
 
 const PROJECT_SEEDS = [
-  { id: "atlantic-ocean", name: "Atlantic Ocean", initials: "AO", stage: "FINAL_REVIEW", sceneCount: 14, resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: true, updated: "Updated today" },
-  { id: "urban-gardens", name: "Urban Gardens", initials: "UG", stage: "SCRIPT", sceneCount: 8, resolution: "1920 × 1080", aspect: "16:9", fps: 30, imported: true, updated: "Updated yesterday" },
+  { id: "atlantic-ocean", name: "Atlantic Ocean", initials: "AO", stage: "SCRIPT_MAPPING", sceneCount: 14, resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: true, updated: "Updated today" },
+  { id: "urban-gardens", name: "Urban Gardens", initials: "UG", stage: "VOICE_SETUP", sceneCount: 8, resolution: "1920 × 1080", aspect: "16:9", fps: 30, imported: true, updated: "Updated yesterday" },
   { id: "product-launch", name: "Product Launch 2026", initials: "PL", stage: "DRAFT", sceneCount: 0, resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: false, updated: "Created Sep 16" },
 ];
 
@@ -64,9 +64,9 @@ function makeScenes(count) {
 
 const state = {
   workspaceState: { projects: PROJECT_SEEDS.map(project => ({ ...project })), activeProjectId: "atlantic-ocean" },
-  projectState: { id: "atlantic-ocean", name: "Atlantic Ocean", initials: "AO", stage: "FINAL_REVIEW", resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: true },
+  projectState: { id: "atlantic-ocean", name: "Atlantic Ocean", initials: "AO", stage: "SCRIPT_MAPPING", resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: true },
   sceneState: { items: makeScenes(14), selectedId: "scene_01", sceneCount: 14, timelineZoom: 1 },
-  scriptState: { bulkText: "SCENE 1\nNarration:\n\"Mỗi dự án bắt đầu bằng một bối cảnh rõ ràng và một mục tiêu cụ thể cho người xem.\"\n\nSCENE 2\nNarration:\n\"Từ đó, từng cảnh có thể phát triển ý chính theo một cấu trúc nhất quán.\"", mapped: 2, missing: 12 },
+  scriptState: { bulkText: "SCENE 1\nNarration:\n\"Mỗi dự án bắt đầu bằng một bối cảnh rõ ràng và một mục tiêu cụ thể cho người xem.\"\n\nSCENE 2\nNarration:\n\"Từ đó, từng cảnh có thể phát triển ý chính theo một cấu trúc nhất quán.\"", mapped: 2, missing: 12, approved: false },
   voiceState: {
     provider: "omnivoice", language: "vi", locale: "default", mode: "voice_design", gender: "male", age: "young adult", pitch: "moderate", style: "documentary", speed: 1.1,
     profileId: "vn-documentary-male", previewText: DEFAULT_NARRATION, previewStatus: "READY", playing: false, subtitleSync: "SYNCED", advancedOpen: false,
@@ -89,11 +89,17 @@ const state = {
   },
   subtitleState: { language: "same", font: "Be Vietnam Pro", weight: "SemiBold", size: 55, position: "Bottom", offset: 102, highlight: true, safeZone: true },
   audioState: { narration: 100, source: 30, bgm: 12, sfx: 35, master: 100 },
-  reviewState: { finalized: false },
-  automationState: { status: "READY FOR REVIEW", progress: 100, step: 4 },
+  workflowState: { scriptApproved: false, voiceApproved: false, previewReady: false },
+  reviewState: { finalized: false, dirty: false },
+  automationState: { status: "SOURCE READY", progress: 100, step: 1 },
   renderState: { quality: "preview", status: "READY", progress: 0, activeStep: -1, requestScene: "scene_11", requestCategory: "Source" },
   uiState: { screen: "dashboard", inspector: "scene", projectMenuOpen: false },
 };
+
+const DEFAULT_VOICE_STATE = structuredClone(state.voiceState);
+const DEFAULT_SUBTITLE_STATE = structuredClone(state.subtitleState);
+const DEFAULT_AUDIO_STATE = structuredClone(state.audioState);
+const DEFAULT_RENDER_STATE = structuredClone(state.renderState);
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
@@ -107,7 +113,7 @@ const projectDuration = () => keptScenes().reduce((total, item) => total + item.
 const activeProject = () => state.workspaceState.projects.find(project => project.id === state.workspaceState.activeProjectId) || state.workspaceState.projects[0];
 
 function projectStageLabel(stage) {
-  return ({ UPLOADED: "Uploaded", MAPPED: "Mapped", SCRIPT: "Script", READY: "Ready", PROCESSING: "Preparing", FINAL_REVIEW: "Final review", RENDERING: "Rendering", REVIEW: "Review", APPROVED: "Approved", NEEDS_CHANGES: "Needs changes", DONE: "Done", DRAFT: "Draft" })[stage] || stage;
+  return ({ UPLOADED: "Uploaded", MAPPED: "Mapped", SCRIPT: "Script", SCRIPT_MAPPING: "Script mapping", VOICE_SETUP: "Voice setup", READY_TO_RENDER: "Ready to render", PROCESSING: "Preparing source", POST_RENDER_REVIEW: "Post-render review", FINAL_REVIEW: "Final review", RENDERING: "Rendering", REVIEW: "Review", APPROVED: "Approved", NEEDS_CHANGES: "Needs changes", DONE: "Done", DRAFT: "Draft" })[stage] || stage;
 }
 
 function syncActiveProject() {
@@ -123,7 +129,7 @@ function syncActiveProject() {
     imported: state.projectState.imported,
     sceneCount: state.sceneState.items.length,
     updated: "Updated just now",
-    snapshot: { sceneState: structuredClone(state.sceneState), scriptState: structuredClone(state.scriptState), reviewState: structuredClone(state.reviewState), automationState: structuredClone(state.automationState) },
+    snapshot: { sceneState: structuredClone(state.sceneState), scriptState: structuredClone(state.scriptState), voiceState: structuredClone(state.voiceState), subtitleState: structuredClone(state.subtitleState), audioState: structuredClone(state.audioState), renderState: structuredClone(state.renderState), workflowState: structuredClone(state.workflowState), reviewState: structuredClone(state.reviewState), automationState: structuredClone(state.automationState) },
   });
 }
 
@@ -135,9 +141,14 @@ function activateProject(id) {
   state.workspaceState.activeProjectId = project.id;
   state.projectState = { id: project.id, name: project.name, initials: project.initials, stage: project.stage, resolution: project.resolution, aspect: project.aspect, fps: project.fps, imported: project.imported };
   state.sceneState = project.snapshot ? structuredClone(project.snapshot.sceneState) : { items: makeScenes(project.sceneCount), selectedId: project.sceneCount ? "scene_01" : null, sceneCount: project.sceneCount, timelineZoom: 1 };
-  state.scriptState = project.snapshot ? structuredClone(project.snapshot.scriptState) : { bulkText: "", mapped: 0, missing: project.sceneCount };
-  state.reviewState = project.snapshot?.reviewState ? structuredClone(project.snapshot.reviewState) : { finalized: false };
-  state.automationState = project.snapshot?.automationState ? structuredClone(project.snapshot.automationState) : { status: project.stage === "FINAL_REVIEW" ? "READY FOR REVIEW" : "IDLE", progress: project.stage === "FINAL_REVIEW" ? 100 : 0, step: project.stage === "FINAL_REVIEW" ? 4 : 0 };
+  state.scriptState = project.snapshot ? structuredClone(project.snapshot.scriptState) : { bulkText: "", mapped: 0, missing: project.sceneCount, approved: project.stage === "VOICE_SETUP" || project.stage === "READY_TO_RENDER" || project.stage === "POST_RENDER_REVIEW" };
+  state.voiceState = project.snapshot?.voiceState ? structuredClone(project.snapshot.voiceState) : structuredClone(DEFAULT_VOICE_STATE);
+  state.subtitleState = project.snapshot?.subtitleState ? structuredClone(project.snapshot.subtitleState) : structuredClone(DEFAULT_SUBTITLE_STATE);
+  state.audioState = project.snapshot?.audioState ? structuredClone(project.snapshot.audioState) : structuredClone(DEFAULT_AUDIO_STATE);
+  state.renderState = project.snapshot?.renderState ? structuredClone(project.snapshot.renderState) : structuredClone(DEFAULT_RENDER_STATE);
+  state.workflowState = project.snapshot?.workflowState ? structuredClone(project.snapshot.workflowState) : { scriptApproved: ["VOICE_SETUP", "READY_TO_RENDER", "POST_RENDER_REVIEW", "APPROVED"].includes(project.stage), voiceApproved: ["READY_TO_RENDER", "POST_RENDER_REVIEW", "APPROVED"].includes(project.stage), previewReady: ["POST_RENDER_REVIEW", "APPROVED"].includes(project.stage) };
+  state.reviewState = project.snapshot?.reviewState ? structuredClone(project.snapshot.reviewState) : { finalized: false, dirty: false };
+  state.automationState = project.snapshot?.automationState ? structuredClone(project.snapshot.automationState) : { status: project.imported ? "SOURCE READY" : "IDLE", progress: project.imported ? 100 : 0, step: project.imported ? 1 : 0 };
   state.renderState.requestScene = state.sceneState.items[0]?.id || "";
   state.uiState.projectMenuOpen = false;
   state.uiState.screen = "dashboard";
@@ -154,8 +165,13 @@ function createProject() {
   state.workspaceState.activeProjectId = project.id;
   state.projectState = { id: project.id, name: project.name, initials: project.initials, stage: project.stage, resolution: project.resolution, aspect: project.aspect, fps: project.fps, imported: project.imported };
   state.sceneState = { items: [], selectedId: null, sceneCount: 0, timelineZoom: 1 };
-  state.scriptState = { bulkText: "", mapped: 0, missing: 0 };
-  state.reviewState = { finalized: false };
+  state.scriptState = { bulkText: "", mapped: 0, missing: 0, approved: false };
+  state.voiceState = structuredClone(DEFAULT_VOICE_STATE);
+  state.subtitleState = structuredClone(DEFAULT_SUBTITLE_STATE);
+  state.audioState = structuredClone(DEFAULT_AUDIO_STATE);
+  state.renderState = structuredClone(DEFAULT_RENDER_STATE);
+  state.workflowState = { scriptApproved: false, voiceApproved: false, previewReady: false };
+  state.reviewState = { finalized: false, dirty: false };
   state.automationState = { status: "IDLE", progress: 0, step: 0 };
   state.renderState.requestScene = "";
   state.uiState.projectMenuOpen = false;
@@ -223,13 +239,15 @@ function renderDashboard() {
   const kept = keptScenes().length;
   const cut = cutScenes().length;
   const preparing = state.automationState.status === "RUNNING";
-  const readyForReview = state.projectState.stage === "FINAL_REVIEW";
+  const scriptReady = state.workflowState.scriptApproved;
+  const voiceReady = state.workflowState.voiceApproved;
+  const previewReady = state.workflowState.previewReady;
   const projectRows = state.workspaceState.projects.map(item => `<button class="workspace-project-row ${item.id === project.id ? "active" : ""}" data-action="select-project" data-project-id="${item.id}"><span class="project-avatar">${item.initials}</span><span><b>${escapeHtml(item.name)}</b><small>${item.sceneCount} scenes · ${escapeHtml(item.updated)}</small></span><span class="project-menu-status">${projectStageLabel(item.stage)}</span></button>`).join("");
-  const nextUp = !state.sceneState.items.length ? `<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Next up</p><h2 class="card-title">Add a source ZIP</h2></div><span class="status-tag pending">Not imported</span></div><p class="caption">This project has no scenes yet. Drop a Flow ZIP or folder and automatic preparation will start.</p><button class="button-secondary" data-nav="import">Import source</button></section>` : preparing ? `<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Automatic preparation</p><h2 class="card-title">Preparing ${state.automationState.progress}%</h2></div><span class="status-tag review">Running</span></div><p class="caption">Source mapping, script mapping, narration setup, subtitle timing, and timeline preparation are running before your review.</p></section>` : state.reviewState.finalized ? `<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Cut locked</p><h2 class="card-title">Ready to render</h2></div><span class="status-tag ready">${kept} scenes</span></div><p class="caption">The final cut is locked for rendering. You can reopen Final Review any time to change it.</p><button class="button-secondary" data-nav="render">Render preview</button></section>` : readyForReview ? `<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Your decision</p><h2 class="card-title">Final cut review</h2></div><span class="status-tag review">${kept} keep · ${cut} cut</span></div><p class="caption">Choose what stays, what is cut, and make basic trim, crop, speed, audio, or transition adjustments before rendering.</p><button class="button-secondary" data-nav="scenes">Open Final Review</button></section>` : `<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Next up</p><h2 class="card-title">Run automatic preparation</h2></div><span class="status-tag pending">Ready</span></div><p class="caption">The source is present. Let the project prepare first, then review only the final cut.</p><button class="button-secondary" data-action="run-auto-prep">Start auto-prep</button></section>`;
-  return `<section class="screen">${screenHeader("Project workspace", `Active project: ${project.name}. Keep multiple productions separate while using one compact workspace.`, `<button class="button-secondary" data-action="create-project">New project</button><button class="button" data-nav="render">Render preview</button>`)}
-    <div class="grid four">${metric("ACTIVE PROJECT", escapeHtml(project.name), `${projectStageLabel(project.stage)} · ${project.updated}`, "blue")}${metric("SOURCE SCENES", state.sceneState.items.length, state.projectState.imported ? "ZIP mapped to project" : "Waiting for ZIP")}${metric("FINAL CUT", `${kept} kept`, `${cut} cut · user controlled`)}${metric("FINAL LENGTH", formatTime(projectDuration()), `${project.fps} fps · ${project.aspect}`, "amber")}</div>
-    <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Production flow</p><h2 class="card-title">Automate preparation; review the final cut</h2></div><button class="button-quiet" data-nav="${state.sceneState.items.length ? "scenes" : "import"}">${state.sceneState.items.length ? "Open Final Review →" : "Import source →"}</button></div>
-      <div class="workflow">${[["Source ZIP", state.projectState.imported ? "done" : "current", state.projectState.imported ? `${state.sceneState.items.length} scenes detected` : "Source needed"],["Auto-prep", state.automationState.progress === 100 ? "done" : preparing ? "current" : "", state.automationState.progress === 100 ? "Mapped" : preparing ? `${state.automationState.progress}%` : "Waiting"],["Final review", readyForReview ? "current" : state.reviewState.finalized ? "done" : "", readyForReview ? `${kept} keep · ${cut} cut` : state.reviewState.finalized ? "Locked for render" : "Waiting"],["Preview", state.renderState.status === "PREVIEW READY" ? "done" : "", state.renderState.status === "PREVIEW READY" ? "Ready" : "Optional"],["Export", state.projectState.stage === "APPROVED" ? "done" : "", state.projectState.stage === "APPROVED" ? "Approved" : "After review"]].map(([name, cls, small], index) => `<div class="workflow-step ${cls}"><span class="step-number">0${index + 1}</span><strong>${name}</strong><small>${small}</small></div>`).join("")}</div></section>
+  const nextUp = !state.sceneState.items.length ? `<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Next up</p><h2 class="card-title">Add a source ZIP</h2></div><span class="status-tag pending">Not imported</span></div><p class="caption">Drop a Flow ZIP or folder. The app scans and orders scenes, then waits for your script.</p><button class="button-secondary" data-nav="import">Import source</button></section>` : preparing ? `<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Source preparation</p><h2 class="card-title">Preparing ${state.automationState.progress}%</h2></div><span class="status-tag review">Running</span></div><p class="caption">Only source detection and scene ordering are running. Narration remains under your control.</p></section>` : !scriptReady ? `<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Your approval</p><h2 class="card-title">Review script mapping</h2></div><span class="status-tag pending">${state.scriptState.mapped} / ${state.sceneState.items.length} mapped</span></div><p class="caption">Paste the scene-by-scene script, inspect the proposed mapping, then approve it before any preview render can start.</p><button class="button-secondary" data-nav="script">Open Script Mapping</button></section>` : !voiceReady ? `<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Manual voice</p><h2 class="card-title">Tune narration</h2></div><span class="status-tag pending">Approval needed</span></div><p class="caption">Adjust OmniVoice and preview the narration yourself before enabling video rendering.</p><button class="button-secondary" data-nav="voice">Open Voice</button></section>` : !previewReady ? `<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Preview render</p><h2 class="card-title">Create review video</h2></div><span class="status-tag pending">Ready</span></div><p class="caption">The source, approved script, and manual voice settings are ready for a low-cost preview render.</p><button class="button-secondary" data-nav="render">Render preview</button></section>` : `<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Final decision</p><h2 class="card-title">Watch and approve export</h2></div><span class="status-tag review">${kept} keep · ${cut} cut</span></div><p class="caption">After preview, keep or cut scenes and make basic edits. Export only when you are satisfied.</p><button class="button-secondary" data-nav="scenes">Open Final Review</button></section>`;
+  return `<section class="screen">${screenHeader("Project workspace", `Active project: ${project.name}. Source intake is automatic; script, voice, and final output stay under your approval.`, `<button class="button-secondary" data-action="create-project">New project</button><button class="button" data-nav="${!scriptReady ? "script" : !voiceReady ? "voice" : !previewReady ? "render" : "scenes"}">Open next step</button>`)}
+    <div class="grid four">${metric("ACTIVE PROJECT", escapeHtml(project.name), `${projectStageLabel(project.stage)} · ${project.updated}`, "blue")}${metric("SOURCE SCENES", state.sceneState.items.length, state.projectState.imported ? "ZIP mapped to project" : "Waiting for ZIP")}${metric("SCRIPT MAP", `${state.scriptState.mapped} / ${state.sceneState.items.length}`, scriptReady ? "Approved" : "Needs your approval")}${metric("FINAL CUT", `${kept} kept`, `${cut} cut · ${formatTime(projectDuration())}`, "amber")}</div>
+    <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Production flow</p><h2 class="card-title">Automatic intake, manual approvals before and after render</h2></div><button class="button-quiet" data-nav="${!scriptReady ? "script" : !voiceReady ? "voice" : !previewReady ? "render" : "scenes"}">Open next step →</button></div>
+      <div class="workflow workflow-six">${[["Source ZIP", state.projectState.imported ? "done" : "current", state.projectState.imported ? `${state.sceneState.items.length} scenes detected` : "Source needed"],["Script map", scriptReady ? "done" : state.projectState.stage === "SCRIPT_MAPPING" ? "current" : "", scriptReady ? "Approved" : `${state.scriptState.mapped} / ${state.sceneState.items.length}`],["Voice", voiceReady ? "done" : state.projectState.stage === "VOICE_SETUP" ? "current" : "", voiceReady ? "Approved" : "Manual tuning"],["Preview", previewReady ? "done" : state.projectState.stage === "RENDERING" ? "current" : "", previewReady ? "Ready" : "Waiting"],["Final review", state.projectState.stage === "POST_RENDER_REVIEW" ? "current" : state.projectState.stage === "APPROVED" ? "done" : "", previewReady ? `${kept} keep · ${cut} cut` : "After preview"],["Export", state.projectState.stage === "APPROVED" ? "done" : "", state.projectState.stage === "APPROVED" ? "Approved" : "Your decision"]].map(([name, cls, small], index) => `<div class="workflow-step ${cls}"><span class="step-number">0${index + 1}</span><strong>${name}</strong><small>${small}</small></div>`).join("")}</div></section>
     <div class="grid two" style="margin-top:16px">${nextUp}<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Workspace projects</p><h2 class="card-title">Switch without mixing assets</h2></div><button class="button-quiet" data-action="create-project">＋ New</button></div><p class="caption">Source, scene count, scripts, review state, and output settings belong to the selected project.</p><div class="workspace-project-list">${projectRows}</div></section></div>
   </section>`;
 }
@@ -237,29 +255,32 @@ function renderDashboard() {
 function renderImport() {
   const total = state.sceneState.items.length;
   const auto = state.automationState;
-  const autoSteps = ["Detect & sort Scene_<number>", "Map script and source metadata", "Prepare OmniVoice and subtitles", "Build final review timeline"];
-  return `<section class="screen">${screenHeader("Import Google Flow source", `Bring a ZIP or folder into ${activeProject().name}. Once the source is recognized, preparation runs automatically and stops at Final Review for your decisions.`, `<button class="button-secondary" data-action="run-auto-prep" ${auto.status === "RUNNING" ? "disabled" : ""}>${auto.status === "RUNNING" ? "Preparing…" : "Start auto-prep"}</button>`)}
+  const autoSteps = ["Detect ZIP structure", "Sort Scene_<number>", "Validate source files", "Open Script Mapping"];
+  return `<section class="screen">${screenHeader("Import Google Flow source", `Bring a ZIP or folder into ${activeProject().name}. The app detects and orders scenes automatically, then stops for your scene-by-scene script mapping.`, `<button class="button-secondary" data-action="run-auto-prep" ${auto.status === "RUNNING" ? "disabled" : ""}>${auto.status === "RUNNING" ? "Preparing…" : "Prepare source"}</button>`)}
     <div class="import-dropzone" id="dropzone"><div><div class="drop-icon">⇩</div><h2>DROP GOOGLE FLOW ZIP HERE</h2><p class="caption">The future app parses ZIP files locally. It will not upload the source to a cloud service.</p><div class="drop-actions"><button class="button" data-action="choose-zip">Choose ZIP & Run</button><button class="button-secondary" data-action="choose-folder">Choose Folder & Run</button></div></div></div>
     <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Dynamic scene count</p><h2 class="card-title">Simulate source sizes before building backend</h2></div></div><div class="simulator-row">${[5, 14, 24].map(count => `<button class="chip-button ${total === count ? "active" : ""}" data-action="simulate-scenes" data-count="${count}">Simulate ${count} Scenes</button>`).join("")}</div></section>
     <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Last mock import</p><h2 class="card-title">Scene_<number> files sorted numerically</h2></div><span class="status-tag ${total ? "ready" : "pending"}">${total ? "Mapped" : "Waiting for source"}</span></div><div class="upload-report"><div class="report-cell"><b>${total}</b><span>Videos detected</span></div><div class="report-cell"><b>${total ? Math.max(0, total - 1) : 0}</b><span>Mapped</span></div><div class="report-cell"><b>${total ? 1 : 0}</b><span>Duplicates</span></div><div class="report-cell"><b>${total ? 1 : 0}</b><span>Missing</span></div><div class="report-cell"><b>0</b><span>Invalid</span></div></div></section>
-    <section class="card card-pad auto-prep-card" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Automatic preparation</p><h2 class="card-title">${auto.status}</h2></div><span class="caption">${auto.progress}%</span></div><p class="caption">Automation prepares the project but does not decide the final cut. That stays with you in Final Review.</p><div class="progress-track"><i style="width:${auto.progress}%"></i></div><div class="auto-prep-list">${autoSteps.map((step, index) => `<div class="${index < auto.step ? "done" : index === auto.step && auto.status === "RUNNING" ? "active" : ""}"><span>${index < auto.step ? "✓" : index + 1}</span><b>${step}</b><small>${index < auto.step ? "Done" : index === auto.step && auto.status === "RUNNING" ? "Running…" : "Waiting"}</small></div>`).join("")}</div></section>
+    <section class="card card-pad auto-prep-card" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Automatic source preparation</p><h2 class="card-title">${auto.status}</h2></div><span class="caption">${auto.progress}%</span></div><p class="caption">Automation prepares only source intake. Script mapping, voice direction, and final cut decisions remain manual approvals.</p><div class="progress-track"><i style="width:${auto.progress}%"></i></div><div class="auto-prep-list">${autoSteps.map((step, index) => `<div class="${index < auto.step ? "done" : index === auto.step && auto.status === "RUNNING" ? "active" : ""}"><span>${index < auto.step ? "✓" : index + 1}</span><b>${step}</b><small>${index < auto.step ? "Done" : index === auto.step && auto.status === "RUNNING" ? "Running…" : "Waiting"}</small></div>`).join("")}</div></section>
   </section>`;
 }
 
 function renderScript() {
-  const previewRows = state.sceneState.items.slice(0, 7).map(scene => `<div class="validation-row"><span class="${scene.source === "Missing" ? "warning" : "check"}">${scene.source === "Missing" ? "▲" : "✓"}</span><b>Scene ${String(scene.number).padStart(2, "0")}</b><span class="muted">Video ${scene.source === "Missing" ? "missing" : "ready"} · Script ${scene.narration ? "ready" : "missing"}</span></div>`).join("");
-  return `<section class="screen">${screenHeader("Script mapping", "Paste one script for all scenes, then refine narration individually from the Scene Inspector. The parser handles SCENE <number> blocks.", `<button class="button" data-action="parse-script">Map narration to scenes</button>`)}
-    <div class="script-layout"><section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Bulk paste</p><h2 class="card-title">Narration by scene</h2></div><span class="caption">${state.scriptState.mapped} mapped</span></div><label class="field-label">Paste format <small>SCENE 1 → Narration: → “text”</small></label><textarea id="bulk-script" class="textarea-input">${escapeHtml(state.scriptState.bulkText)}</textarea><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span class="caption">Unmatched blocks remain in draft; nothing is rendered.</span><button class="button" data-action="parse-script">Parse & map</button></div></section>
-      <aside class="card card-pad"><div class="card-head"><div><p class="eyebrow">Validation</p><h2 class="card-title">Source + script health</h2></div><span class="status-tag pending">${state.scriptState.missing} missing</span></div>${previewRows}<button class="button-quiet" data-nav="scenes" style="margin-top:9px">Open all ${state.sceneState.items.length} scenes →</button></aside></div>
+  if (!state.sceneState.items.length) return `<section class="screen">${screenHeader("Script Mapping", "Import a source ZIP first. Scene slots are created from the detected source files.", `<button class="button" data-nav="import">Import source</button>`)}<div class="empty-state"><div><h2>No scene slots yet</h2><p>Once the ZIP has been scanned, paste a script with SCENE blocks and review the proposed mapping here.</p></div></div></section>`;
+  const allMapped = state.scriptState.mapped === state.sceneState.items.length;
+  const previewRows = state.sceneState.items.map(scene => `<div class="validation-row"><span class="${scene.narration ? "check" : "warning"}">${scene.narration ? "✓" : "▲"}</span><div><b>Scene ${String(scene.number).padStart(2, "0")}</b><span class="muted">Source ready · Script ${scene.narration ? "mapped" : "missing"}</span>${scene.narration ? `<small class="muted">${escapeHtml(scene.narration.length > 96 ? `${scene.narration.slice(0, 96)}…` : scene.narration)}</small>` : ""}</div></div>`).join("");
+  return `<section class="screen">${screenHeader("Script Mapping", "Paste the script you want for each scene. The app proposes the mapping; you inspect it and approve it before voice or rendering can continue.", `<button class="button-secondary" data-action="parse-script">Map & review</button><button class="button" data-action="approve-script-mapping" ${allMapped && !state.scriptState.approved ? "" : "disabled"}>${state.scriptState.approved ? "Mapping approved" : "Approve mapping"}</button>`)}
+    <div class="script-layout"><section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Your scene script</p><h2 class="card-title">Narration by scene</h2></div><span class="caption">${state.scriptState.mapped} / ${state.sceneState.items.length} mapped</span></div><label class="field-label">Paste format <small>SCENE 1 → Narration: → “text”</small></label><textarea id="bulk-script" class="textarea-input">${escapeHtml(state.scriptState.bulkText)}</textarea><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span class="caption">Mapping stays in draft until you approve it. Nothing is rendered yet.</span><button class="button" data-action="parse-script">Parse & review</button></div></section>
+      <aside class="card card-pad"><div class="card-head"><div><p class="eyebrow">Mapping review</p><h2 class="card-title">Confirm every scene</h2></div><span class="status-tag ${state.scriptState.approved ? "ready" : allMapped ? "review" : "pending"}">${state.scriptState.approved ? "Approved" : allMapped ? "Ready to approve" : `${state.scriptState.missing} missing`}</span></div>${previewRows}<button class="button-secondary" data-action="approve-script-mapping" ${allMapped && !state.scriptState.approved ? "" : "disabled"} style="margin-top:12px;width:100%">${state.scriptState.approved ? "Mapping approved" : "Approve & continue to Voice"}</button></aside></div>
   </section>`;
 }
 
 function renderScenes() {
   const kept = keptScenes().length;
   const cut = cutScenes().length;
-  if (!state.sceneState.items.length) return `<section class="screen">${screenHeader("Final Review", "Import a source first. Automatic preparation will build the review timeline before you make cut decisions.", `<button class="button" data-nav="import">Import source</button>`)}<div class="empty-state"><div><h2>No review timeline yet</h2><p>Once a Flow ZIP is prepared, each scene appears here with Keep/Cut and basic edit controls.</p></div></div></section>`;
-  return `<section class="screen">${screenHeader("Final Review", "This is your only required decision point after automatic preparation. Select a scene, choose Keep or Cut, then adjust trim, speed, crop, transition, or source audio in the inspector.", `<button class="button-secondary" data-action="keep-all-scenes">Keep all</button><button class="button" data-action="finalize-review">Finalize ${kept} kept · ${cut} cut</button>`)}
-    <section class="card card-pad review-summary"><div><p class="eyebrow">Cut decision</p><h2 class="card-title">${kept} kept · ${cut} cut · ${formatTime(projectDuration())} final duration</h2><p class="caption">Cut scenes stay available for reversal but are excluded from preview and final render.</p></div><button class="button-quiet" data-action="toggle-cut-filter">${state.reviewState.showCutsOnly ? "Show all scenes" : "Show cuts only"}</button></section>
+  if (!state.sceneState.items.length) return `<section class="screen">${screenHeader("Final Review", "Import a source and approve its script and voice first. Final review becomes available after a preview render.", `<button class="button" data-nav="import">Import source</button>`)}<div class="empty-state"><div><h2>No review timeline yet</h2><p>Once a preview video exists, each scene appears here with Keep/Cut and basic edit controls.</p></div></div></section>`;
+  if (!state.workflowState.previewReady) return `<section class="screen">${screenHeader("Final Review", "Final review is deliberately after preview rendering. First approve the script, tune the voice, and create a review video.", `<button class="button" data-nav="${!state.workflowState.scriptApproved ? "script" : !state.workflowState.voiceApproved ? "voice" : "render"}">Open next step</button>`)}<div class="empty-state"><div><h2>Preview video not ready</h2><p>You will choose Keep/Cut and make basic video edits only after you can watch the generated preview.</p></div></div></section>`;
+  return `<section class="screen">${screenHeader("Final Review", "Watch the generated preview, then choose Keep or Cut and adjust trim, speed, crop, transition, or source audio. Re-render a preview after edits; export only when you are satisfied.", `<button class="button-secondary" data-action="keep-all-scenes">Keep all</button><button class="button-secondary" data-action="rerender-preview">${state.reviewState.dirty ? "Render updated preview" : "Render another preview"}</button><button class="button" data-action="approve-export">Approve & Export</button>`)}
+    <section class="card card-pad review-summary"><div><p class="eyebrow">Post-render decision</p><h2 class="card-title">${kept} kept · ${cut} cut · ${formatTime(projectDuration())} final duration</h2><p class="caption">${state.reviewState.dirty ? "Edits are pending a new preview render." : "Cut scenes stay available for reversal and are excluded from any new render."}</p></div><button class="button-quiet" data-action="toggle-cut-filter">${state.reviewState.showCutsOnly ? "Show all scenes" : "Show cuts only"}</button></section>
     <div class="scene-grid">${state.sceneState.items.filter(scene => !state.reviewState.showCutsOnly || scene.decision === "cut").map(sceneCard).join("")}</div>
   </section>`;
 }
@@ -274,10 +295,11 @@ function renderVoice() {
   const localeOptions = lang.locales.map(locale => ({ id: locale, label: locale === "default" ? "Default" : locale }));
   const profileOptions = voice.profiles.map(profile => ({ id: profile.id, label: profile.name }));
   const isLanguageReady = VOICE_CAPABILITIES.supportedLanguages.includes(voice.language);
+  const canApproveVoice = state.workflowState.scriptApproved;
   const waves = Array.from({ length: 44 }, (_, index) => `<i class="wave" style="height:${18 + ((index * 23) % 70)}px;animation-delay:-${(index % 9) / 10}s"></i>`).join("");
   const history = voice.history.map(item => `<div class="history-row"><div class="history-title"><b>${item.name}</b><span>${item.language} · ${item.gender} · ${item.speed.toFixed(2)}x · ${item.duration} · ${item.created}</span></div><button data-action="play-history" data-history="${item.id}">Play</button><button data-action="select-history" data-history="${item.id}">Select</button><button data-action="delete-history" data-history="${item.id}">Delete</button></div>`).join("");
   const comparisons = voice.comparisons.map(item => `<div class="compare-slot"><span class="compare-key">${item.id}</span><div><b>${item.gender} narrator</b><span>${item.language} · ${item.speed.toFixed(2)}x</span></div><div><button data-action="play-compare" data-id="${item.id}">Play ${item.id}</button> <button data-action="select-compare" data-id="${item.id}">${item.selected ? "Selected" : `Select ${item.id}`}</button></div></div>`).join("");
-  return `<section class="screen">${screenHeader("Voice", "A dedicated preview-first voice workspace. OmniVoice is the only active engine; future-language and provider controls are visibly marked as prototype or unavailable.", `<button class="button-secondary" data-action="save-voice-profile">Save Profile</button><button class="button" data-action="generate-preview">Generate Preview</button>`)}
+  return `<section class="screen">${screenHeader("Voice", "Tune voice settings manually and listen to a preview. OmniVoice is the only active engine; this stage must be approved before video rendering.", `<button class="button-secondary" data-action="save-voice-profile">Save Profile</button><button class="button-secondary" data-action="generate-preview">Generate Preview</button><button class="button" data-action="approve-voice" ${canApproveVoice ? "" : "disabled"}>${state.workflowState.voiceApproved ? "Voice approved" : "Approve voice & continue"}</button>`)}
     <div class="voice-layout"><section class="voice-config"><article class="card card-pad"><p class="eyebrow">Voice engine</p><div class="voice-engine"><div class="voice-engine-icon">◖</div><div><b>OmniVoice</b><span>Active production engine · Edge TTS runtime</span></div><span class="availability">● ACTIVE</span></div>
       <div class="form-stack" style="margin-top:15px"><div><label class="control-label">Language <em>${isLanguageReady ? "Supported now" : "Future provider mock"}</em></label><div class="select-with-hint"><select class="select-input" data-setting="voice-language">${optionList(LANGUAGE_CATALOG, voice.language)}</select>${capabilityHint(isLanguageReady, "prototype")}</div></div>
         <div><label class="control-label">Accent / Locale <em>${voice.language === "vi" ? "Default active" : "Mock options"}</em></label><select class="select-input" data-setting="voice-locale">${optionList(localeOptions, voice.locale)}</select></div>
@@ -315,15 +337,17 @@ function renderRender() {
   const render = state.renderState;
   const kept = keptScenes().length;
   const cut = cutScenes().length;
-  return `<section class="screen">${screenHeader("Render & final review", `${kept} kept scenes will be included; ${cut} cut scenes are excluded. Choose a low-cost preview first, then approve export after you inspect the player.`, `<button class="button-quiet" data-nav="scenes">Adjust Final Review</button><button class="button-secondary" data-action="start-render" data-quality="preview">Render Preview</button><button class="button" data-action="start-render" data-quality="final">Render Final</button>`)}
-    <div class="render-layout"><section class="card card-pad"><p class="eyebrow">Final player</p><div class="video-player" data-project-title="${escapeHtml(activeProject().name)}"><span class="player-play">▶</span></div><div style="display:flex;justify-content:space-between;margin-top:12px"><span class="caption">${kept} scenes · ${formatTime(projectDuration())} · ${activeProject().aspect} · ${activeProject().fps}fps · H.264</span><div><button class="button-secondary" data-action="approve-export">Approve & Export</button><button class="button-quiet" data-action="request-changes">Request Changes</button></div></div></section><section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Render progress</p><h2 class="card-title">${render.status}</h2></div><span class="caption">${render.progress}%</span></div><div class="progress-track"><i style="width:${render.progress}%"></i></div><div class="progress-steps">${steps.map((step, index) => `<div class="progress-step ${index < render.activeStep ? "done" : index === render.activeStep ? "active" : ""}"><span class="progress-dot">${index < render.activeStep ? "✓" : index + 1}</span><div><b>${step}</b><span>${index < render.activeStep ? "Done" : index === render.activeStep ? "Working…" : "Waiting"}</span></div><span class="tiny subtle">${index === 1 ? "Voice" : index === 4 ? "Remotion" : index === 5 ? "FFmpeg" : ""}</span></div>`).join("")}</div></section></div>
+  const canRender = state.workflowState.scriptApproved && state.workflowState.voiceApproved;
+  const hasPreview = state.workflowState.previewReady;
+  return `<section class="screen">${screenHeader("Render", canRender ? `${kept} kept scenes will be included; ${cut} cut scenes are excluded. Create a preview, then watch it in Final Review before exporting.` : "Rendering is locked until you approve scene-by-scene script mapping and manual voice settings.", `<button class="button-quiet" data-nav="${hasPreview ? "scenes" : !state.workflowState.scriptApproved ? "script" : "voice"}">${hasPreview ? "Open Final Review" : !state.workflowState.scriptApproved ? "Review Script" : "Review Voice"}</button><button class="button-secondary" data-action="start-render" data-quality="preview" ${canRender ? "" : "disabled"}>Render Preview</button><button class="button" data-action="start-render" data-quality="final" ${canRender ? "" : "disabled"}>Render Final</button>`)}
+    <div class="render-layout"><section class="card card-pad"><p class="eyebrow">Review player</p><div class="video-player" data-project-title="${escapeHtml(activeProject().name)}"><span class="player-play">▶</span></div><div style="display:flex;justify-content:space-between;margin-top:12px"><span class="caption">${kept} scenes · ${formatTime(projectDuration())} · ${activeProject().aspect} · ${activeProject().fps}fps · H.264</span><div><button class="button-secondary" data-nav="scenes" ${hasPreview ? "" : "disabled"}>Basic edits</button><button class="button-quiet" data-action="approve-export" ${hasPreview ? "" : "disabled"}>Approve & Export</button></div></div></section><section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Render progress</p><h2 class="card-title">${render.status}</h2></div><span class="caption">${render.progress}%</span></div><div class="progress-track"><i style="width:${render.progress}%"></i></div><div class="progress-steps">${steps.map((step, index) => `<div class="progress-step ${index < render.activeStep ? "done" : index === render.activeStep ? "active" : ""}"><span class="progress-dot">${index < render.activeStep ? "✓" : index + 1}</span><div><b>${step}</b><span>${index < render.activeStep ? "Done" : index === render.activeStep ? "Working…" : "Waiting"}</span></div><span class="tiny subtle">${index === 1 ? "Voice" : index === 4 ? "Remotion" : index === 5 ? "FFmpeg" : ""}</span></div>`).join("")}</div></section></div>
     <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Request changes</p><h2 class="card-title">Send a precise revision back through the project</h2></div></div><div class="form-row three"><div><label class="field-label">Scene</label><select class="select-input" data-setting="request-scene">${optionList(state.sceneState.items.map(scene => ({ id: scene.id, label: `Scene ${String(scene.number).padStart(2, "0")} · ${scene.title}` })), render.requestScene)}</select></div><div><label class="field-label">Change type</label><select class="select-input" data-setting="request-category">${optionList(["Source", "Trim", "Speed", "Crop", "Audio", "Transition", "Subtitle", "Voice Timing", "Voice Override"], render.requestCategory)}</select></div><div><label class="field-label">Action</label><button class="button-secondary" style="width:100%" data-action="apply-changes">Apply Changes</button></div></div><textarea id="change-comment" class="textarea-input compact-textarea" style="margin-top:10px" placeholder="Describe the correction for this scene…"></textarea></section>
   </section>`;
 }
 
 function renderSettings() {
   const project = activeProject();
-  const statuses = ["DRAFT", "UPLOADED", "MAPPED", "SCRIPT", "PROCESSING", "FINAL_REVIEW", "READY", "RENDERING", "REVIEW", "APPROVED", "NEEDS_CHANGES", "DONE"];
+  const statuses = ["DRAFT", "UPLOADED", "MAPPED", "SCRIPT_MAPPING", "VOICE_SETUP", "READY_TO_RENDER", "PROCESSING", "RENDERING", "POST_RENDER_REVIEW", "APPROVED", "NEEDS_CHANGES", "DONE"];
   return `<section class="screen">${screenHeader("Settings", "Workspace defaults remain separate from the active project. Provider integrations, filesystem paths, and rendering jobs are intentionally not wired here.")}
     <div class="grid two"><section class="card card-pad"><p class="eyebrow">Active project</p><h2 class="card-title">${escapeHtml(project.name)}</h2><div class="form-stack" style="margin-top:16px"><div><label class="field-label">Project status</label><select class="select-input" data-setting="project-stage">${optionList(statuses, state.projectState.stage)}</select></div><div class="form-row"><div><label class="field-label">Format</label><output class="readout">${project.resolution}</output></div><div><label class="field-label">Frame rate</label><output class="readout">${project.fps} fps</output></div></div><p class="caption">Changing this status affects only ${escapeHtml(project.name)}. Future global preferences stay outside each project record.</p></div></section><section class="card card-pad"><p class="eyebrow">Prototype boundary</p><h2 class="card-title">No backend connection</h2><p class="caption">All imports, scripts, previews, voice settings, renders, and exports in this prototype are in-memory UI interactions. OmniVoice is shown as the active engine only; VoiceStudio is intentionally absent.</p></section></div></section>`;
 }
@@ -348,8 +372,9 @@ function renderInspector() {
     inspector.innerHTML = `<div class="inspector-head"><h2>Inspector</h2><span class="caption">Project</span></div><div class="inspector-empty"><div><p class="eyebrow">Progressive disclosure</p><b>${state.uiState.screen === "voice" ? "Voice has its own full workspace" : "Select a scene"}</b><p>${state.uiState.screen === "voice" ? "Per-scene voice override will appear here when a future provider supports it." : "Scene-level source, trim, crop, speed, audio, transitions, and optional voice overrides live here."}</p></div></div>`;
     return;
   }
+  const finalCutControls = state.workflowState.previewReady ? `<div class="inspector-section"><h3>Final cut</h3><p class="caption">Your decision controls inclusion in the next preview and final render.</p><div class="cut-actions"><button class="button-secondary ${scene.decision === "keep" ? "selected-keep" : ""}" data-action="set-scene-decision" data-decision="keep">✓ Keep</button><button class="button-quiet ${scene.decision === "cut" ? "selected-cut" : ""}" data-action="set-scene-decision" data-decision="cut">✕ Cut</button></div></div>` : `<div class="inspector-section"><h3>Final cut</h3><p class="caption">Keep/Cut decisions unlock after a preview render, so script mapping and voice approval stay focused first.</p></div>`;
   inspector.innerHTML = `<div class="inspector-head"><h2>Scene Inspector</h2><button class="button-quiet" data-action="close-inspector">×</button></div><div class="inspector-section"><div class="inspector-scene-preview">${String(scene.number).padStart(2, "0")}</div><div class="inspector-title-row"><b>Scene ${String(scene.number).padStart(2, "0")}</b><span class="status-tag ${scene.status}">${scene.status}</span></div><p class="caption">${escapeHtml(scene.title)} · ${scene.source} · Version ${scene.sourceVersion}</p><div style="display:flex;gap:5px"><button class="button-secondary" data-action="approve-scene">Approve source</button><button class="button-quiet" data-action="reject-scene">Flag source</button><button class="button-quiet" data-action="replace-source">Replace</button></div></div>
-    <div class="inspector-section"><h3>Final cut</h3><p class="caption">Your decision controls inclusion in preview and final render.</p><div class="cut-actions"><button class="button-secondary ${scene.decision === "keep" ? "selected-keep" : ""}" data-action="set-scene-decision" data-decision="keep">✓ Keep</button><button class="button-quiet ${scene.decision === "cut" ? "selected-cut" : ""}" data-action="set-scene-decision" data-decision="cut">✕ Cut</button></div></div>
+    ${finalCutControls}
     <div class="inspector-section"><h3>Video edit</h3><label class="field-label">Trim start <small>${scene.edit.trimStart.toFixed(1)}s</small></label><input type="range" min="0" max="${Math.max(1, scene.duration - .5)}" step=".1" value="${scene.edit.trimStart}" data-scene-setting="trimStart" /><label class="field-label" style="margin-top:10px">Playback speed <small>${scene.edit.speed.toFixed(2)}x</small></label><select class="select-input" data-scene-setting="speed">${optionList([.5,.75,1,1.1,1.25,1.5,2], scene.edit.speed)}</select><div class="form-row" style="margin-top:10px"><div><label class="field-label">Crop</label><select class="select-input" data-scene-setting="crop">${optionList(["cover", "contain", "custom"], scene.edit.crop)}</select></div><div><label class="field-label">Position</label><select class="select-input" data-scene-setting="position">${optionList(["center", "top", "bottom", "left", "right"], scene.edit.position)}</select></div></div><label class="field-label" style="margin-top:10px">Transition</label><select class="select-input" data-scene-setting="transition">${optionList(["none", "crossfade", "soft slide", "wipe reveal", "paper"], scene.edit.transition)}</select><div class="toggle-row"><span>Hold last frame</span><button class="switch ${scene.edit.holdLastFrame ? "on" : ""}" data-action="toggle-hold"></button></div></div>
     <div class="inspector-section"><h3>Source audio</h3><label class="field-label">Mode</label><select class="select-input" data-audio-setting="mode">${optionList(["mute", "background", "full"], scene.sourceAudio.mode)}</select><label class="field-label" style="margin-top:10px">Volume <small>${scene.sourceAudio.volume}%</small></label><input type="range" min="0" max="100" value="${scene.sourceAudio.volume}" data-audio-setting="volume" /><div class="toggle-row"><span>Duck under narration</span><button class="switch ${scene.sourceAudio.duck ? "on" : ""}" data-action="toggle-duck"></button></div><div class="form-row"><div><label class="field-label">Fade In</label><input class="number-input" type="number" step=".05" value="${scene.sourceAudio.fadeIn}" data-audio-setting="fadeIn" /></div><div><label class="field-label">Fade Out</label><input class="number-input" type="number" step=".05" value="${scene.sourceAudio.fadeOut}" data-audio-setting="fadeOut" /></div></div></div>
     <div class="inspector-section"><h3>Voice override</h3><div class="toggle-row"><span>Use project default</span><button class="switch ${scene.voiceOverride ? "" : "on"}" data-action="toggle-voice-override"></button></div>${scene.voiceOverride ? `<div class="form-stack"><select class="select-input">${optionList(overrideLanguages, state.voiceState.language)}</select><select class="select-input"><option>Vietnamese Documentary Male</option><option>Vietnamese Documentary Female</option></select><select class="select-input"><option>1.10x</option><option>1.12x</option></select></div>` : `<p class="caption">Overrides are intentionally collapsed until needed.</p>`}</div>`;
@@ -363,13 +388,16 @@ function renderTimeline() {
 
 function setScreen(screen) { state.uiState.screen = screen; state.uiState.projectMenuOpen = false; renderScreen(); }
 function selectScene(id) { if (state.sceneState.items.some(scene => scene.id === id)) { state.sceneState.selectedId = id; savePulse(); renderScreen(); } }
-function setVoiceSpeed(value) { state.voiceState.speed = Math.min(1.2, Math.max(.85, +Number(value).toFixed(2))); state.voiceState.subtitleSync = "NEEDS UPDATE"; savePulse("Voice changed"); renderScreen(); }
+function markVoiceChanged(message = "Voice changed") { state.voiceState.subtitleSync = "NEEDS UPDATE"; if (state.workflowState.scriptApproved) { state.workflowState.voiceApproved = false; state.workflowState.previewReady = false; state.projectState.stage = "VOICE_SETUP"; } savePulse(message); renderScreen(); }
+function setVoiceSpeed(value) { state.voiceState.speed = Math.min(1.2, Math.max(.85, +Number(value).toFixed(2))); markVoiceChanged(); }
+function markReviewDirty() { if (state.workflowState.previewReady) { state.reviewState.dirty = true; state.reviewState.finalized = false; state.projectState.stage = "POST_RENDER_REVIEW"; } }
 
 function parseScript() {
   const text = $("#bulk-script")?.value || state.scriptState.bulkText;
   state.scriptState.bulkText = text;
   const matches = [...text.matchAll(/SCENE\s*(\d+)[\s\S]*?Narration\s*:\s*["“]?([\s\S]*?)(?=\n\s*SCENE\s*\d+|$)/gi)];
   let mapped = 0;
+  state.sceneState.items.forEach(scene => scene.narration = "");
   matches.forEach(match => {
     const scene = state.sceneState.items.find(item => item.number === Number(match[1]));
     const narration = match[2].trim().replace(/[”"]+$/, "").trim();
@@ -377,8 +405,37 @@ function parseScript() {
   });
   state.scriptState.mapped = state.sceneState.items.filter(scene => scene.narration).length;
   state.scriptState.missing = state.sceneState.items.length - state.scriptState.mapped;
+  state.scriptState.approved = false;
+  state.workflowState.scriptApproved = false;
+  state.workflowState.voiceApproved = false;
+  state.workflowState.previewReady = false;
+  state.projectState.stage = "SCRIPT_MAPPING";
   toast(`${mapped} script block${mapped === 1 ? "" : "s"} mapped to dynamic scenes.`);
   savePulse(); renderScreen();
+}
+
+function approveScriptMapping() {
+  if (state.scriptState.mapped !== state.sceneState.items.length) { toast("Map every scene before approval.", "warning"); return; }
+  state.scriptState.approved = true;
+  state.workflowState.scriptApproved = true;
+  state.workflowState.voiceApproved = false;
+  state.workflowState.previewReady = false;
+  state.projectState.stage = "VOICE_SETUP";
+  state.uiState.screen = "voice";
+  toast("Script mapping approved. Tune and approve the voice next.");
+  savePulse("Script mapping approved");
+  renderScreen();
+}
+
+function approveVoice() {
+  if (!state.workflowState.scriptApproved) { toast("Approve the script mapping first.", "warning"); return; }
+  state.workflowState.voiceApproved = true;
+  state.workflowState.previewReady = false;
+  state.projectState.stage = "READY_TO_RENDER";
+  state.uiState.screen = "render";
+  toast("Voice approved. A preview render is now available.");
+  savePulse("Voice approved");
+  renderScreen();
 }
 
 function runAutoPrep() {
@@ -387,11 +444,12 @@ function runAutoPrep() {
     state.sceneState.items = makeScenes(5);
     state.sceneState.sceneCount = 5;
     state.sceneState.selectedId = "scene_01";
-    state.scriptState = { bulkText: "", mapped: 0, missing: 5 };
+    state.scriptState = { bulkText: "", mapped: 0, missing: 5, approved: false };
   }
   state.projectState.imported = true;
   state.projectState.stage = "PROCESSING";
-  state.reviewState = { finalized: false, showCutsOnly: false };
+  state.workflowState = { scriptApproved: false, voiceApproved: false, previewReady: false };
+  state.reviewState = { finalized: false, dirty: false, showCutsOnly: false };
   state.automationState = { status: "RUNNING", progress: 0, step: 0 };
   renderScreen();
   const interval = setInterval(() => {
@@ -403,27 +461,25 @@ function runAutoPrep() {
         scene.source = scene.source === "Missing" ? "Google Flow" : scene.source;
         scene.status = "ready";
         scene.decision = "keep";
-        scene.narration = scene.narration || `Narration placeholder for Scene ${scene.number}.`;
+        scene.narration = "";
       });
-      state.scriptState.mapped = state.sceneState.items.length;
-      state.scriptState.missing = 0;
-      state.voiceState.subtitleSync = "SYNCED";
-      state.automationState = { status: "READY FOR REVIEW", progress: 100, step: 4 };
-      state.projectState.stage = "FINAL_REVIEW";
-      state.uiState.screen = "scenes";
-      toast("Automatic preparation complete. Make the final cut decisions.");
-      savePulse("Ready for Final Review");
+      state.scriptState = { bulkText: "", mapped: 0, missing: state.sceneState.items.length, approved: false };
+      state.automationState = { status: "SOURCE READY", progress: 100, step: 4 };
+      state.projectState.stage = "SCRIPT_MAPPING";
+      state.uiState.screen = "script";
+      toast("Source ready. Paste and review the script mapping.");
+      savePulse("Source ready for script mapping");
     }
     renderScreen();
   }, 300);
 }
 function mockImport() { runAutoPrep(); }
-function simulateScenes(count) { state.sceneState.items = makeScenes(count); state.sceneState.sceneCount = count; state.sceneState.selectedId = state.sceneState.items[0]?.id || null; state.scriptState.mapped = Math.min(2, count); state.scriptState.missing = Math.max(0, count - state.scriptState.mapped); state.projectState.imported = count > 0; state.projectState.stage = count ? "MAPPED" : "DRAFT"; state.reviewState = { finalized: false, showCutsOnly: false }; state.automationState = { status: "IDLE", progress: 0, step: 0 }; toast(`Prototype now renders ${count} scenes.`); savePulse(); renderScreen(); }
+function simulateScenes(count) { state.sceneState.items = makeScenes(count); state.sceneState.items.forEach(scene => scene.narration = ""); state.sceneState.sceneCount = count; state.sceneState.selectedId = state.sceneState.items[0]?.id || null; state.scriptState = { bulkText: "", mapped: 0, missing: count, approved: false }; state.workflowState = { scriptApproved: false, voiceApproved: false, previewReady: false }; state.projectState.imported = count > 0; state.projectState.stage = count ? "MAPPED" : "DRAFT"; state.reviewState = { finalized: false, dirty: false, showCutsOnly: false }; state.automationState = { status: "IDLE", progress: 0, step: 0 }; toast(`Prototype now shows ${count} source scenes ready for script mapping.`); savePulse(); renderScreen(); }
 function generatePreview() { state.voiceState.previewStatus = "GENERATING…"; state.voiceState.playing = false; renderScreen(); setTimeout(() => { state.voiceState.previewStatus = "READY"; state.voiceState.history.unshift({ id: `take-${Date.now()}`, name: `${state.voiceState.gender === "male" ? "Male" : "Female"} ${state.voiceState.speed.toFixed(2)}`, language: language().label, gender: state.voiceState.gender === "male" ? "Male" : "Female", speed: state.voiceState.speed, duration: "8.0s", created: "Just now" }); toast("Preview generated (mock). No video render started."); savePulse(); renderScreen(); }, 760); }
 function togglePlay() { state.voiceState.playing = !state.voiceState.playing; toast(state.voiceState.playing ? "Playing mock preview…" : "Preview stopped."); renderScreen(); }
 function saveProfile() { const voice = state.voiceState; const id = `profile-${Date.now()}`; voice.profiles.unshift({ id, name: `Custom ${language().label} ${voice.gender === "male" ? "Male" : "Female"}`, provider: voice.provider, language: voice.language, locale: voice.locale, mode: voice.mode, gender: voice.gender, pitch: voice.pitch, speed: voice.speed }); voice.profileId = id; toast("Voice profile saved to prototype state."); savePulse(); renderScreen(); }
-function useProfile(id) { const profile = state.voiceState.profiles.find(item => item.id === id); if (!profile) return; Object.assign(state.voiceState, { profileId: id, language: profile.language, locale: profile.locale, mode: profile.mode, gender: profile.gender, pitch: profile.pitch, speed: profile.speed, subtitleSync: "NEEDS UPDATE" }); toast(`${profile.name} applied.`); renderScreen(); }
-function startRender(quality) { const render = state.renderState; render.quality = quality; render.status = `RENDERING ${quality.toUpperCase()}`; render.progress = 0; render.activeStep = 0; renderScreen(); const interval = setInterval(() => { render.progress = Math.min(100, render.progress + 9); render.activeStep = Math.min(5, Math.floor(render.progress / 17)); renderScreen(); if (render.progress >= 100) { clearInterval(interval); render.status = quality === "final" ? "FINAL READY FOR REVIEW" : "PREVIEW READY"; render.activeStep = 6; toast(`${quality === "final" ? "Final" : "Preview"} render complete (mock).`); renderScreen(); } }, 280); }
+function useProfile(id) { const profile = state.voiceState.profiles.find(item => item.id === id); if (!profile) return; Object.assign(state.voiceState, { profileId: id, language: profile.language, locale: profile.locale, mode: profile.mode, gender: profile.gender, pitch: profile.pitch, speed: profile.speed, subtitleSync: "NEEDS UPDATE" }); toast(`${profile.name} applied.`); markVoiceChanged("Voice profile changed"); }
+function startRender(quality) { if (!state.workflowState.scriptApproved || !state.workflowState.voiceApproved) { toast("Approve script mapping and voice before rendering.", "warning"); return; } if (!keptScenes().length) { toast("Keep at least one scene before rendering.", "warning"); return; } const render = state.renderState; state.projectState.stage = "RENDERING"; render.quality = quality; render.status = `RENDERING ${quality.toUpperCase()}`; render.progress = 0; render.activeStep = 0; renderScreen(); const interval = setInterval(() => { render.progress = Math.min(100, render.progress + 9); render.activeStep = Math.min(5, Math.floor(render.progress / 17)); renderScreen(); if (render.progress >= 100) { clearInterval(interval); render.status = quality === "final" ? "FINAL READY FOR REVIEW" : "PREVIEW READY"; render.activeStep = 6; state.workflowState.previewReady = true; state.reviewState.dirty = false; state.projectState.stage = "POST_RENDER_REVIEW"; state.uiState.screen = "scenes"; toast(`${quality === "final" ? "Final" : "Preview"} render complete (mock). Watch it before exporting.`); savePulse("Preview ready for final review"); renderScreen(); } }, 280); }
 
 document.addEventListener("click", event => {
   const target = event.target.closest("[data-action], [data-nav]");
@@ -440,20 +496,22 @@ document.addEventListener("click", event => {
     case "run-auto-prep": runAutoPrep(); break;
     case "mock-import": case "choose-zip": case "choose-folder": mockImport(); break;
     case "parse-script": parseScript(); break;
+    case "approve-script-mapping": approveScriptMapping(); break;
+    case "approve-voice": approveVoice(); break;
     case "approve-scene": currentScene().status = "approved"; toast("Scene approved."); savePulse(); renderScreen(); break;
     case "reject-scene": currentScene().status = "rejected"; toast("Scene marked for replacement.", "warning"); savePulse(); renderScreen(); break;
     case "approve-all": state.sceneState.items.forEach(scene => { if (scene.status === "pending") scene.status = "approved"; }); toast("Visible pending scenes approved."); renderScreen(); break;
-    case "set-scene-decision": currentScene().decision = target.dataset.decision; state.reviewState.finalized = false; state.projectState.stage = "FINAL_REVIEW"; toast(`Scene ${String(currentScene().number).padStart(2, "0")} marked ${target.dataset.decision}.`); savePulse("Cut decision saved"); renderScreen(); break;
-    case "keep-all-scenes": state.sceneState.items.forEach(scene => { scene.decision = "keep"; }); state.reviewState.finalized = false; state.projectState.stage = "FINAL_REVIEW"; toast("All scenes marked keep."); savePulse("Cut decisions saved"); renderScreen(); break;
+    case "set-scene-decision": if (!state.workflowState.previewReady) { toast("Watch a preview before deciding Keep or Cut.", "warning"); break; } currentScene().decision = target.dataset.decision; markReviewDirty(); toast(`Scene ${String(currentScene().number).padStart(2, "0")} marked ${target.dataset.decision}.`); savePulse("Cut decision saved"); renderScreen(); break;
+    case "keep-all-scenes": if (!state.workflowState.previewReady) { toast("Watch a preview before deciding Keep or Cut.", "warning"); break; } state.sceneState.items.forEach(scene => { scene.decision = "keep"; }); markReviewDirty(); toast("All scenes marked keep."); savePulse("Cut decisions saved"); renderScreen(); break;
     case "toggle-cut-filter": state.reviewState.showCutsOnly = !state.reviewState.showCutsOnly; renderScreen(); break;
-    case "finalize-review": if (!keptScenes().length) { toast("Keep at least one scene before finalizing.", "warning"); break; } state.reviewState.finalized = true; state.projectState.stage = "READY"; state.uiState.screen = "render"; toast(`${keptScenes().length} kept scenes locked for render.`); savePulse("Final cut ready"); renderScreen(); break;
+    case "finalize-review": if (!keptScenes().length) { toast("Keep at least one scene before finalizing.", "warning"); break; } state.uiState.screen = "render"; toast(`${keptScenes().length} kept scenes ready for a new preview.`); renderScreen(); break;
     case "replace-source": currentScene().source = "Google Flow"; currentScene().sourceVersion += 1; currentScene().status = "pending"; toast("Source replacement queued (mock).", "warning"); renderScreen(); break;
-    case "toggle-hold": currentScene().edit.holdLastFrame = !currentScene().edit.holdLastFrame; renderInspector(); break;
-    case "toggle-duck": currentScene().sourceAudio.duck = !currentScene().sourceAudio.duck; renderInspector(); break;
+    case "toggle-hold": currentScene().edit.holdLastFrame = !currentScene().edit.holdLastFrame; markReviewDirty(); savePulse("Video edit changed"); renderInspector(); break;
+    case "toggle-duck": currentScene().sourceAudio.duck = !currentScene().sourceAudio.duck; markReviewDirty(); savePulse("Source audio changed"); renderInspector(); break;
     case "toggle-voice-override": currentScene().voiceOverride = currentScene().voiceOverride ? null : { language: state.voiceState.language, speed: state.voiceState.speed }; renderInspector(); break;
-    case "voice-mode": state.voiceState.mode = target.dataset.mode; renderScreen(); break;
-    case "voice-gender": state.voiceState.gender = target.dataset.value; renderScreen(); break;
-    case "voice-pitch": state.voiceState.pitch = target.dataset.value; renderScreen(); break;
+    case "voice-mode": state.voiceState.mode = target.dataset.mode; markVoiceChanged(); break;
+    case "voice-gender": state.voiceState.gender = target.dataset.value; markVoiceChanged(); break;
+    case "voice-pitch": state.voiceState.pitch = target.dataset.value; markVoiceChanged(); break;
     case "speed-step": setVoiceSpeed(state.voiceState.speed + Number(target.dataset.direction) * .01); break;
     case "speed-preset": setVoiceSpeed(Number(target.dataset.speed)); break;
     case "generate-preview": generatePreview(); break;
@@ -474,9 +532,10 @@ document.addEventListener("click", event => {
     case "toggle-safe-zone": state.subtitleState.safeZone = !state.subtitleState.safeZone; renderScreen(); break;
     case "save-subtitles": case "save-audio": toast("Preset saved to prototype state."); savePulse(); break;
     case "start-render": startRender(target.dataset.quality); break;
-    case "approve-export": state.projectState.stage = "APPROVED"; toast("Project approved for export (mock)."); savePulse(); break;
+    case "rerender-preview": startRender("preview"); break;
+    case "approve-export": if (!state.workflowState.previewReady) { toast("Render and watch a preview before export approval.", "warning"); break; } if (state.reviewState.dirty) { toast("Render an updated preview before approving export.", "warning"); break; } state.reviewState.finalized = true; state.projectState.stage = "APPROVED"; toast("Project approved for export (mock)."); savePulse("Export approved"); renderScreen(); break;
     case "request-changes": $("#change-comment")?.focus(); break;
-    case "apply-changes": state.projectState.stage = "NEEDS_CHANGES"; toast("Change request applied to project state.", "warning"); savePulse(); break;
+    case "apply-changes": if (!state.workflowState.previewReady) { toast("Create a preview before applying review changes.", "warning"); break; } markReviewDirty(); state.uiState.screen = "scenes"; toast("Change request recorded. Adjust the scene and render an updated preview.", "warning"); savePulse("Review change requested"); renderScreen(); break;
     case "timeline-zoom-in": state.sceneState.timelineZoom = Math.min(1.6, state.sceneState.timelineZoom + .1); renderTimeline(); break;
     case "timeline-zoom-out": state.sceneState.timelineZoom = Math.max(.6, state.sceneState.timelineZoom - .1); renderTimeline(); break;
     default: break;
@@ -486,8 +545,8 @@ document.addEventListener("click", event => {
 document.addEventListener("change", event => {
   const target = event.target;
   const setting = target.dataset.setting;
-  if (setting === "voice-language") { state.voiceState.language = target.value; state.voiceState.locale = language().locales[0]; state.voiceState.subtitleSync = "NEEDS UPDATE"; renderScreen(); }
-  if (setting === "voice-locale") { state.voiceState.locale = target.value; renderScreen(); }
+  if (setting === "voice-language") { state.voiceState.language = target.value; state.voiceState.locale = language().locales[0]; markVoiceChanged(); }
+  if (setting === "voice-locale") { state.voiceState.locale = target.value; markVoiceChanged(); }
   if (setting === "voice-profile") useProfile(target.value);
   if (setting === "voice-speed") setVoiceSpeed(target.value);
   if (setting === "preview-text") { state.voiceState.previewText = target.value; }
@@ -497,8 +556,8 @@ document.addEventListener("change", event => {
   if (setting === "request-scene") state.renderState.requestScene = target.value;
   if (setting === "request-category") state.renderState.requestCategory = target.value;
   if (setting === "project-stage") { state.projectState.stage = target.value; savePulse("Project status updated"); renderScreen(); }
-  if (target.dataset.sceneSetting) { const key = target.dataset.sceneSetting; currentScene().edit[key] = key === "speed" || key === "trimStart" ? Number(target.value) : target.value; renderInspector(); renderTimeline(); }
-  if (target.dataset.audioSetting) { const key = target.dataset.audioSetting; currentScene().sourceAudio[key] = ["volume", "fadeIn", "fadeOut"].includes(key) ? Number(target.value) : target.value; renderInspector(); }
+  if (target.dataset.sceneSetting) { const key = target.dataset.sceneSetting; currentScene().edit[key] = key === "speed" || key === "trimStart" ? Number(target.value) : target.value; markReviewDirty(); savePulse("Video edit changed"); renderInspector(); renderTimeline(); }
+  if (target.dataset.audioSetting) { const key = target.dataset.audioSetting; currentScene().sourceAudio[key] = ["volume", "fadeIn", "fadeOut"].includes(key) ? Number(target.value) : target.value; markReviewDirty(); savePulse("Source audio changed"); renderInspector(); }
 });
 
 document.addEventListener("dragover", event => { if (event.target.closest("#dropzone")) { event.preventDefault(); $("#dropzone")?.classList.add("dragging"); } });
