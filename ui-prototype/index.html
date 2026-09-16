@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="description" content="AI Video Studio desktop-first UI/UX prototype" />
+    <title>AI Video Studio — UI Prototype</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <aside class="sidebar" aria-label="Workspace navigation">
+        <div class="brand">
+          <div class="brand-mark">✦</div>
+          <div>
+            <strong>AI Video Studio</strong>
+            <span>Creator workspace</span>
+          </div>
+        </div>
+
+        <button class="project-switcher" type="button" data-action="open-project-menu">
+          <span class="project-avatar">AO</span>
+          <span><b>Atlantic Ocean</b><small>14 scenes · Draft</small></span>
+          <span class="chevron">⌄</span>
+        </button>
+
+        <nav id="sidebar-nav" class="sidebar-nav"></nav>
+
+        <div class="sidebar-footer">
+          <div class="engine-pill"><span class="online-dot"></span> OmniVoice ready</div>
+          <button class="quiet-button" type="button" data-nav="settings">⚙ Settings</button>
+        </div>
+      </aside>
+
+      <main class="workspace">
+        <header class="topbar">
+          <div class="crumbs"><span>Projects</span><i>/</i><b id="screen-title">Dashboard</b></div>
+          <div class="topbar-actions">
+            <span class="save-state" id="save-state">● All changes saved</span>
+            <button class="icon-button" type="button" aria-label="Notifications">◌</button>
+            <button class="avatar-button" type="button" aria-label="Account">NL</button>
+          </div>
+        </header>
+        <section id="screen-root" class="screen-root" aria-live="polite"></section>
+      </main>
+
+      <aside id="inspector" class="inspector" aria-label="Scene inspector"></aside>
+
+      <footer class="timeline-shell">
+        <div class="timeline-head">
+          <div><b>Timeline</b><span id="timeline-summary">14 scenes · 01:24</span></div>
+          <div class="timeline-actions">
+            <button class="mini-button" type="button" data-action="timeline-zoom-out">−</button>
+            <span id="timeline-zoom">100%</span>
+            <button class="mini-button" type="button" data-action="timeline-zoom-in">+</button>
+          </div>
+        </div>
+        <div id="timeline" class="timeline" aria-label="Dynamic scene timeline"></div>
+      </footer>
+    </div>
+
+    <div id="toast-region" class="toast-region" aria-live="polite"></div>
+    <script src="app.js"></script>
+  </body>
+</html>
