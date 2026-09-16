@@ -18,11 +18,14 @@
           </div>
         </div>
 
-        <button class="project-switcher" type="button" data-action="open-project-menu">
-          <span class="project-avatar">AO</span>
-          <span><b>Atlantic Ocean</b><small>14 scenes · Draft</small></span>
-          <span class="chevron">⌄</span>
-        </button>
+        <div class="project-switcher-wrap">
+          <button class="project-switcher" type="button" data-action="open-project-menu" aria-haspopup="menu" aria-expanded="false">
+            <span id="project-avatar" class="project-avatar">AO</span>
+            <span><b id="project-name">Atlantic Ocean</b><small id="project-meta">14 scenes · Review</small></span>
+            <span class="chevron">⌄</span>
+          </button>
+          <div id="project-menu" class="project-menu" role="menu" hidden></div>
+        </div>
 
         <nav id="sidebar-nav" class="sidebar-nav"></nav>
 
@@ -34,7 +37,7 @@
 
       <main class="workspace">
         <header class="topbar">
-          <div class="crumbs"><span>Projects</span><i>/</i><b id="screen-title">Dashboard</b></div>
+          <div class="crumbs"><span>Projects</span><i>/</i><span id="active-project-crumb">Atlantic Ocean</span><i>/</i><b id="screen-title">Dashboard</b></div>
           <div class="topbar-actions">
             <span class="save-state" id="save-state">● All changes saved</span>
             <button class="icon-button" type="button" aria-label="Notifications">◌</button>

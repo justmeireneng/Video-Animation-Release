@@ -36,14 +36,20 @@ const VOICE_CAPABILITIES = {
   speed: { min: 0.85, max: 1.2, step: 0.01 },
 };
 
-const DEFAULT_NARRATION = "Đại Tây Dương không chỉ là một khoảng nước nằm giữa các lục địa. Nó là một hệ thống khổng lồ kết nối khí hậu, địa chất, thương mại và lịch sử của cả thế giới.";
+const DEFAULT_NARRATION = "Dự án này bắt đầu bằng bối cảnh rõ ràng, sau đó dẫn người xem qua các ý chính theo từng cảnh có thể kiểm soát độc lập.";
+
+const PROJECT_SEEDS = [
+  { id: "atlantic-ocean", name: "Atlantic Ocean", initials: "AO", stage: "REVIEW", sceneCount: 14, resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: true, updated: "Updated today" },
+  { id: "urban-gardens", name: "Urban Gardens", initials: "UG", stage: "SCRIPT", sceneCount: 8, resolution: "1920 × 1080", aspect: "16:9", fps: 30, imported: true, updated: "Updated yesterday" },
+  { id: "product-launch", name: "Product Launch 2026", initials: "PL", stage: "DRAFT", sceneCount: 0, resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: false, updated: "Created Sep 16" },
+];
 
 function makeScenes(count) {
-  const subjects = ["Atlantic overview", "Geographic position", "Ocean scale", "Mid-Atlantic Ridge", "Plate movement", "Gulf Stream", "Climate impact", "Sea routes", "Global trade", "Subsea cables", "Ecosystems", "Human pressure", "Connected system", "Closing thought"];
+  const subjects = ["Opening context", "Core idea", "Key evidence", "Detail", "Change over time", "Human perspective", "Practical impact", "System view", "Next question", "Closing thought"];
   return Array.from({ length: count }, (_, index) => ({
     id: `scene_${String(index + 1).padStart(2, "0")}`,
     number: index + 1,
-    title: subjects[index] || `Ocean story ${index + 1}`,
+    title: subjects[index] || `Scene ${index + 1}`,
     narration: index === 0 ? DEFAULT_NARRATION : "",
     source: index % 6 === 5 ? "Missing" : "Google Flow",
     sourceVersion: index % 3 === 0 ? 2 : 1,
@@ -56,9 +62,10 @@ function makeScenes(count) {
 }
 
 const state = {
-  projectState: { name: "Atlantic Ocean", stage: "REVIEW", resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: true },
+  workspaceState: { projects: PROJECT_SEEDS.map(project => ({ ...project })), activeProjectId: "atlantic-ocean" },
+  projectState: { id: "atlantic-ocean", name: "Atlantic Ocean", initials: "AO", stage: "REVIEW", resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: true },
   sceneState: { items: makeScenes(14), selectedId: "scene_01", sceneCount: 14, timelineZoom: 1 },
-  scriptState: { bulkText: "SCENE 1\nNarration:\n\"Đại Tây Dương không chỉ là một khoảng nước nằm giữa các lục địa. Nó là một hệ thống khổng lồ kết nối khí hậu, địa chất, thương mại và lịch sử của cả thế giới.\"\n\nSCENE 2\nNarration:\n\"Nó nằm giữa châu Mỹ ở phía tây, và châu Âu cùng châu Phi ở phía đông.\"", mapped: 2, missing: 12 },
+  scriptState: { bulkText: "SCENE 1\nNarration:\n\"Mỗi dự án bắt đầu bằng một bối cảnh rõ ràng và một mục tiêu cụ thể cho người xem.\"\n\nSCENE 2\nNarration:\n\"Từ đó, từng cảnh có thể phát triển ý chính theo một cấu trúc nhất quán.\"", mapped: 2, missing: 12 },
   voiceState: {
     provider: "omnivoice", language: "vi", locale: "default", mode: "voice_design", gender: "male", age: "young adult", pitch: "moderate", style: "documentary", speed: 1.1,
     profileId: "vn-documentary-male", previewText: DEFAULT_NARRATION, previewStatus: "READY", playing: false, subtitleSync: "SYNCED", advancedOpen: false,
@@ -82,7 +89,7 @@ const state = {
   subtitleState: { language: "same", font: "Be Vietnam Pro", weight: "SemiBold", size: 55, position: "Bottom", offset: 102, highlight: true, safeZone: true },
   audioState: { narration: 100, source: 30, bgm: 12, sfx: 35, master: 100 },
   renderState: { quality: "preview", status: "READY", progress: 0, activeStep: -1, requestScene: "scene_11", requestCategory: "Source" },
-  uiState: { screen: "dashboard", inspector: "scene" },
+  uiState: { screen: "dashboard", inspector: "scene", projectMenuOpen: false },
 };
 
 const $ = (selector, root = document) => root.querySelector(selector);
@@ -92,8 +99,78 @@ const currentScene = () => state.sceneState.items.find(scene => scene.id === sta
 const language = () => LANGUAGE_CATALOG.find(item => item.id === state.voiceState.language) || LANGUAGE_CATALOG[0];
 const formatTime = (seconds) => `${Math.floor(seconds / 60)}:${String(Math.round(seconds % 60)).padStart(2, "0")}`;
 const projectDuration = () => state.sceneState.items.reduce((total, item) => total + item.duration, 0);
+const activeProject = () => state.workspaceState.projects.find(project => project.id === state.workspaceState.activeProjectId) || state.workspaceState.projects[0];
+
+function projectStageLabel(stage) {
+  return ({ UPLOADED: "Uploaded", MAPPED: "Mapped", SCRIPT: "Script", READY: "Ready", RENDERING: "Rendering", REVIEW: "Review", APPROVED: "Approved", NEEDS_CHANGES: "Needs changes", DONE: "Done", DRAFT: "Draft" })[stage] || stage;
+}
+
+function syncActiveProject() {
+  const project = activeProject();
+  if (!project) return;
+  Object.assign(project, {
+    name: state.projectState.name,
+    initials: state.projectState.initials,
+    stage: state.projectState.stage,
+    resolution: state.projectState.resolution,
+    aspect: state.projectState.aspect,
+    fps: state.projectState.fps,
+    imported: state.projectState.imported,
+    sceneCount: state.sceneState.items.length,
+    updated: "Updated just now",
+    snapshot: { sceneState: structuredClone(state.sceneState), scriptState: structuredClone(state.scriptState) },
+  });
+}
+
+function activateProject(id) {
+  if (id === state.workspaceState.activeProjectId) { state.uiState.projectMenuOpen = false; renderProjectContext(); return; }
+  syncActiveProject();
+  const project = state.workspaceState.projects.find(item => item.id === id);
+  if (!project) return;
+  state.workspaceState.activeProjectId = project.id;
+  state.projectState = { id: project.id, name: project.name, initials: project.initials, stage: project.stage, resolution: project.resolution, aspect: project.aspect, fps: project.fps, imported: project.imported };
+  state.sceneState = project.snapshot ? structuredClone(project.snapshot.sceneState) : { items: makeScenes(project.sceneCount), selectedId: project.sceneCount ? "scene_01" : null, sceneCount: project.sceneCount, timelineZoom: 1 };
+  state.scriptState = project.snapshot ? structuredClone(project.snapshot.scriptState) : { bulkText: "", mapped: 0, missing: project.sceneCount };
+  state.renderState.requestScene = state.sceneState.items[0]?.id || "";
+  state.uiState.projectMenuOpen = false;
+  state.uiState.screen = "dashboard";
+  toast(`${project.name} is now the active project.`);
+  savePulse();
+  renderScreen();
+}
+
+function createProject() {
+  syncActiveProject();
+  const number = state.workspaceState.projects.length + 1;
+  const project = { id: `untitled-project-${Date.now()}`, name: `Untitled Project ${number}`, initials: "NP", stage: "DRAFT", sceneCount: 0, resolution: "1080 × 1920", aspect: "9:16", fps: 30, imported: false, updated: "Created just now" };
+  state.workspaceState.projects.unshift(project);
+  state.workspaceState.activeProjectId = project.id;
+  state.projectState = { id: project.id, name: project.name, initials: project.initials, stage: project.stage, resolution: project.resolution, aspect: project.aspect, fps: project.fps, imported: project.imported };
+  state.sceneState = { items: [], selectedId: null, sceneCount: 0, timelineZoom: 1 };
+  state.scriptState = { bulkText: "", mapped: 0, missing: 0 };
+  state.renderState.requestScene = "";
+  state.uiState.projectMenuOpen = false;
+  state.uiState.screen = "import";
+  toast("New project created. Add a source when ready.");
+  savePulse();
+  renderScreen();
+}
+
+function renderProjectContext() {
+  const project = activeProject();
+  if (!project) return;
+  $("#project-avatar").textContent = project.initials;
+  $("#project-name").textContent = project.name;
+  $("#project-meta").textContent = `${project.sceneCount} scenes · ${projectStageLabel(project.stage)}`;
+  $("#active-project-crumb").textContent = project.name;
+  const menu = $("#project-menu");
+  menu.hidden = !state.uiState.projectMenuOpen;
+  menu.innerHTML = `<div class="project-menu-head"><span>Workspace projects</span><span>${state.workspaceState.projects.length}</span></div><button class="button-secondary project-menu-new" data-action="create-project">＋ New project</button><div class="project-menu-list">${state.workspaceState.projects.map(item => `<button class="project-menu-item ${item.id === project.id ? "active" : ""}" role="menuitem" data-action="select-project" data-project-id="${item.id}"><span class="project-avatar">${item.initials}</span><span><b>${escapeHtml(item.name)}</b><small>${item.sceneCount} scenes · ${escapeHtml(item.updated)}</small></span><span class="project-menu-status">${projectStageLabel(item.stage)}</span></button>`).join("")}</div>`;
+  $(".project-switcher").setAttribute("aria-expanded", String(state.uiState.projectMenuOpen));
+}
 
 function savePulse(message = "All changes saved") {
+  syncActiveProject();
   const node = $("#save-state");
   node.textContent = "● Saving…";
   setTimeout(() => { node.textContent = `● ${message}`; }, 280);
@@ -133,22 +210,25 @@ function sceneCard(scene) {
 }
 
 function renderDashboard() {
+  const project = activeProject();
   const completed = state.sceneState.items.filter(scene => scene.status === "approved").length;
-  return `<section class="screen">${screenHeader("Good morning, Nhieu Loc", "Your Atlantic project is ready for a focused review. Start from the next item below or jump directly into any workspace.", `<button class="button" data-nav="render">Render preview</button>`)}
-    <div class="grid four">${metric("PROJECT STATUS", "Review", "● 8 scenes approved", "blue")}${metric("SCENES", state.sceneState.items.length, `${completed} approved · ${state.sceneState.items.length - completed} pending`)}${metric("NARRATION", "Ready", "OmniVoice · Vietnamese")}${metric("FINAL LENGTH", formatTime(projectDuration()), "30 fps · 9:16", "amber")}</div>
-    <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Production flow</p><h2 class="card-title">Simple steps, detailed controls only when needed</h2></div><button class="button-quiet" data-nav="scenes">Open scene review →</button></div>
-      <div class="workflow">${[["Import", "done", "ZIP mapped"],["Script", "done", "2 / 14 mapped"],["Scenes", "current", "8 approved"],["Voice", "", "Preview ready"],["Render", "", "Not started"]].map(([name, cls, small], index) => `<div class="workflow-step ${cls}"><span class="step-number">0${index + 1}</span><strong>${name}</strong><small>${small}</small></div>`).join("")}</div></section>
-    <div class="grid two" style="margin-top:16px"><section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Next up</p><h2 class="card-title">Review scene 11 source</h2></div><span class="status-tag pending">Needs review</span></div><p class="caption">The uploaded Flow source needs a replacement or approval before final export.</p><button class="button-secondary" data-action="select-scene" data-scene-id="scene_11" data-nav="scenes">Review scene 11</button></section>
-      <section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Narration</p><h2 class="card-title">Voice timing is synced</h2></div><span class="status-tag ready">Ready</span></div><p class="caption">OmniVoice narration is using Vietnamese Documentary Male at 1.10x. A new speed will flag subtitle timing for update.</p><button class="button-secondary" data-nav="voice">Open Voice studio</button></section></div>
+  const pendingScene = state.sceneState.items.find(scene => scene.status !== "approved");
+  const projectRows = state.workspaceState.projects.map(item => `<button class="workspace-project-row ${item.id === project.id ? "active" : ""}" data-action="select-project" data-project-id="${item.id}"><span class="project-avatar">${item.initials}</span><span><b>${escapeHtml(item.name)}</b><small>${item.sceneCount} scenes · ${escapeHtml(item.updated)}</small></span><span class="project-menu-status">${projectStageLabel(item.stage)}</span></button>`).join("");
+  const nextUp = !state.sceneState.items.length ? `<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Next up</p><h2 class="card-title">Add a source</h2></div><span class="status-tag pending">Not imported</span></div><p class="caption">This project has no scenes yet. Import a Flow ZIP or folder when the source is ready.</p><button class="button-secondary" data-nav="import">Import source</button></section>` : pendingScene ? `<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Next up</p><h2 class="card-title">Review scene ${String(pendingScene.number).padStart(2, "0")}</h2></div><span class="status-tag pending">Needs review</span></div><p class="caption">Continue from the next unresolved item in this project. Every scene stays scoped to ${escapeHtml(project.name)}.</p><button class="button-secondary" data-action="select-scene" data-scene-id="${pendingScene.id}" data-nav="scenes">Open scene review</button></section>` : `<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Project ready</p><h2 class="card-title">All scenes approved</h2></div><span class="status-tag ready">Ready</span></div><p class="caption">The source review is complete for ${escapeHtml(project.name)}. Continue to voice review or render a preview.</p><button class="button-secondary" data-nav="voice">Review voice</button></section>`;
+  return `<section class="screen">${screenHeader("Project workspace", `Active project: ${project.name}. Keep multiple productions separate while using one compact workspace.`, `<button class="button-secondary" data-action="create-project">New project</button><button class="button" data-nav="render">Render preview</button>`)}
+    <div class="grid four">${metric("ACTIVE PROJECT", escapeHtml(project.name), `${projectStageLabel(project.stage)} · ${project.updated}`, "blue")}${metric("SCENES", state.sceneState.items.length, `${completed} approved · ${Math.max(0, state.sceneState.items.length - completed)} pending`)}${metric("NARRATION", state.sceneState.items.length ? "Ready" : "Not started", "OmniVoice · project scoped")}${metric("FINAL LENGTH", formatTime(projectDuration()), `${project.fps} fps · ${project.aspect}`, "amber")}</div>
+    <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Production flow</p><h2 class="card-title">One workflow per project</h2></div><button class="button-quiet" data-nav="${state.sceneState.items.length ? "scenes" : "import"}">${state.sceneState.items.length ? "Open scene review →" : "Import source →"}</button></div>
+      <div class="workflow">${[["Import", state.projectState.imported ? "done" : "current", state.projectState.imported ? `${state.sceneState.items.length} scenes mapped` : "Source needed"],["Script", state.scriptState.mapped ? "done" : "", `${state.scriptState.mapped} / ${state.sceneState.items.length} mapped`],["Scenes", state.sceneState.items.length ? "current" : "", `${completed} approved`],["Voice", "", state.sceneState.items.length ? "Preview ready" : "Waiting for script"],["Render", "", "Not started"]].map(([name, cls, small], index) => `<div class="workflow-step ${cls}"><span class="step-number">0${index + 1}</span><strong>${name}</strong><small>${small}</small></div>`).join("")}</div></section>
+    <div class="grid two" style="margin-top:16px">${nextUp}<section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Workspace projects</p><h2 class="card-title">Switch without mixing assets</h2></div><button class="button-quiet" data-action="create-project">＋ New</button></div><p class="caption">Source, scene count, scripts, review state, and output settings belong to the selected project.</p><div class="workspace-project-list">${projectRows}</div></section></div>
   </section>`;
 }
 
 function renderImport() {
   const total = state.sceneState.items.length;
-  return `<section class="screen">${screenHeader("Import Google Flow source", "Bring in a Google Flow ZIP or a folder. This prototype detects Scene_<number>, sorts numerically, and reports source health.", `<button class="button-secondary" data-action="mock-import">Run import mock</button>`)}
+  return `<section class="screen">${screenHeader("Import Google Flow source", `Bring a ZIP or folder into ${activeProject().name}. This prototype detects Scene_<number>, sorts numerically, and reports source health.`, `<button class="button-secondary" data-action="mock-import">Run import mock</button>`)}
     <div class="import-dropzone" id="dropzone"><div><div class="drop-icon">⇩</div><h2>DROP GOOGLE FLOW ZIP HERE</h2><p class="caption">ZIP is parsed locally in the future app. No cloud upload is implied.</p><div class="drop-actions"><button class="button" data-action="choose-zip">Choose ZIP</button><button class="button-secondary" data-action="choose-folder">Choose Folder</button></div></div></div>
-    <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Dynamic scene count</p><h2 class="card-title">Simulate source sizes before building backend</h2></div></div><div class="simulator-row"><button class="chip-button" data-action="simulate-scenes" data-count="5">Simulate 5 Scenes</button><button class="chip-button active" data-action="simulate-scenes" data-count="14">Simulate 14 Scenes</button><button class="chip-button" data-action="simulate-scenes" data-count="24">Simulate 24 Scenes</button></div></section>
-    <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Last mock import</p><h2 class="card-title">Scene_<number> files sorted numerically</h2></div><span class="status-tag ready">Mapped</span></div><div class="upload-report"><div class="report-cell"><b>${total}</b><span>Videos detected</span></div><div class="report-cell"><b>${Math.max(0, total - 1)}</b><span>Mapped</span></div><div class="report-cell"><b>1</b><span>Duplicates</span></div><div class="report-cell"><b>1</b><span>Missing</span></div><div class="report-cell"><b>0</b><span>Invalid</span></div></div></section>
+    <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Dynamic scene count</p><h2 class="card-title">Simulate source sizes before building backend</h2></div></div><div class="simulator-row">${[5, 14, 24].map(count => `<button class="chip-button ${total === count ? "active" : ""}" data-action="simulate-scenes" data-count="${count}">Simulate ${count} Scenes</button>`).join("")}</div></section>
+    <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Last mock import</p><h2 class="card-title">Scene_<number> files sorted numerically</h2></div><span class="status-tag ${total ? "ready" : "pending"}">${total ? "Mapped" : "Waiting for source"}</span></div><div class="upload-report"><div class="report-cell"><b>${total}</b><span>Videos detected</span></div><div class="report-cell"><b>${total ? Math.max(0, total - 1) : 0}</b><span>Mapped</span></div><div class="report-cell"><b>${total ? 1 : 0}</b><span>Duplicates</span></div><div class="report-cell"><b>${total ? 1 : 0}</b><span>Missing</span></div><div class="report-cell"><b>0</b><span>Invalid</span></div></div></section>
   </section>`;
 }
 
@@ -222,8 +302,10 @@ function renderRender() {
 }
 
 function renderSettings() {
-  return `<section class="screen">${screenHeader("Settings", "Prototype workspace settings. Provider integrations, filesystem paths, and rendering jobs are intentionally not wired here.")}
-    <div class="grid two"><section class="card card-pad"><p class="eyebrow">Project</p><div class="form-stack"><div><label class="field-label">Project status</label><select class="select-input"><option>UPLOADED</option><option>MAPPED</option><option>READY</option><option>RENDERING</option><option>REVIEW</option><option>APPROVED</option><option>NEEDS_CHANGES</option><option>DONE</option></select></div><p class="caption">The future desktop app maps this state to the existing project workflow instead of replacing it.</p></div></section><section class="card card-pad"><p class="eyebrow">Prototype boundary</p><h2 class="card-title">No backend connection</h2><p class="caption">All imports, scripts, previews, voice settings, renders, and exports in this prototype are in-memory UI interactions. OmniVoice is shown as the active engine only; VoiceStudio is intentionally absent.</p></section></div></section>`;
+  const project = activeProject();
+  const statuses = ["DRAFT", "UPLOADED", "MAPPED", "SCRIPT", "READY", "RENDERING", "REVIEW", "APPROVED", "NEEDS_CHANGES", "DONE"];
+  return `<section class="screen">${screenHeader("Settings", "Workspace defaults remain separate from the active project. Provider integrations, filesystem paths, and rendering jobs are intentionally not wired here.")}
+    <div class="grid two"><section class="card card-pad"><p class="eyebrow">Active project</p><h2 class="card-title">${escapeHtml(project.name)}</h2><div class="form-stack" style="margin-top:16px"><div><label class="field-label">Project status</label><select class="select-input" data-setting="project-stage">${optionList(statuses, state.projectState.stage)}</select></div><div class="form-row"><div><label class="field-label">Format</label><output class="readout">${project.resolution}</output></div><div><label class="field-label">Frame rate</label><output class="readout">${project.fps} fps</output></div></div><p class="caption">Changing this status affects only ${escapeHtml(project.name)}. Future global preferences stay outside each project record.</p></div></section><section class="card card-pad"><p class="eyebrow">Prototype boundary</p><h2 class="card-title">No backend connection</h2><p class="caption">All imports, scripts, previews, voice settings, renders, and exports in this prototype are in-memory UI interactions. OmniVoice is shown as the active engine only; VoiceStudio is intentionally absent.</p></section></div></section>`;
 }
 
 function renderScreen() {
@@ -232,6 +314,7 @@ function renderScreen() {
   root.innerHTML = (screens[state.uiState.screen] || renderDashboard)();
   const title = NAVIGATION.find(item => item[0] === state.uiState.screen)?.[2] || "Dashboard";
   $("#screen-title").textContent = title;
+  renderProjectContext();
   renderNavigation();
   renderInspector();
   renderTimeline();
@@ -239,6 +322,7 @@ function renderScreen() {
 
 function renderInspector() {
   const scene = currentScene();
+  const overrideLanguages = VOICE_CAPABILITIES.supportedLanguages.map(id => LANGUAGE_CATALOG.find(item => item.id === id)).filter(Boolean);
   const inspector = $("#inspector");
   if (!scene || state.uiState.screen === "voice") {
     inspector.innerHTML = `<div class="inspector-head"><h2>Inspector</h2><span class="caption">Project</span></div><div class="inspector-empty"><div><p class="eyebrow">Progressive disclosure</p><b>${state.uiState.screen === "voice" ? "Voice has its own full workspace" : "Select a scene"}</b><p>${state.uiState.screen === "voice" ? "Per-scene voice override will appear here when a future provider supports it." : "Scene-level source, trim, crop, speed, audio, transitions, and optional voice overrides live here."}</p></div></div>`;
@@ -247,7 +331,7 @@ function renderInspector() {
   inspector.innerHTML = `<div class="inspector-head"><h2>Scene Inspector</h2><button class="button-quiet" data-action="close-inspector">×</button></div><div class="inspector-section"><div class="inspector-scene-preview">${String(scene.number).padStart(2, "0")}</div><div class="inspector-title-row"><b>Scene ${String(scene.number).padStart(2, "0")}</b><span class="status-tag ${scene.status}">${scene.status}</span></div><p class="caption">${escapeHtml(scene.title)} · ${scene.source} · Version ${scene.sourceVersion}</p><div style="display:flex;gap:5px"><button class="button-secondary" data-action="approve-scene">Approve</button><button class="button-quiet" data-action="reject-scene">Reject</button><button class="button-quiet" data-action="replace-source">Replace</button></div></div>
     <div class="inspector-section"><h3>Video edit</h3><label class="field-label">Trim start <small>${scene.edit.trimStart.toFixed(1)}s</small></label><input type="range" min="0" max="${Math.max(1, scene.duration - .5)}" step=".1" value="${scene.edit.trimStart}" data-scene-setting="trimStart" /><label class="field-label" style="margin-top:10px">Playback speed <small>${scene.edit.speed.toFixed(2)}x</small></label><select class="select-input" data-scene-setting="speed">${optionList([.5,.75,1,1.1,1.25,1.5,2], scene.edit.speed)}</select><div class="form-row" style="margin-top:10px"><div><label class="field-label">Crop</label><select class="select-input" data-scene-setting="crop">${optionList(["cover", "contain", "custom"], scene.edit.crop)}</select></div><div><label class="field-label">Position</label><select class="select-input" data-scene-setting="position">${optionList(["center", "top", "bottom", "left", "right"], scene.edit.position)}</select></div></div><label class="field-label" style="margin-top:10px">Transition</label><select class="select-input" data-scene-setting="transition">${optionList(["none", "crossfade", "soft slide", "wipe reveal", "paper"], scene.edit.transition)}</select><div class="toggle-row"><span>Hold last frame</span><button class="switch ${scene.edit.holdLastFrame ? "on" : ""}" data-action="toggle-hold"></button></div></div>
     <div class="inspector-section"><h3>Source audio</h3><label class="field-label">Mode</label><select class="select-input" data-audio-setting="mode">${optionList(["mute", "background", "full"], scene.sourceAudio.mode)}</select><label class="field-label" style="margin-top:10px">Volume <small>${scene.sourceAudio.volume}%</small></label><input type="range" min="0" max="100" value="${scene.sourceAudio.volume}" data-audio-setting="volume" /><div class="toggle-row"><span>Duck under narration</span><button class="switch ${scene.sourceAudio.duck ? "on" : ""}" data-action="toggle-duck"></button></div><div class="form-row"><div><label class="field-label">Fade In</label><input class="number-input" type="number" step=".05" value="${scene.sourceAudio.fadeIn}" data-audio-setting="fadeIn" /></div><div><label class="field-label">Fade Out</label><input class="number-input" type="number" step=".05" value="${scene.sourceAudio.fadeOut}" data-audio-setting="fadeOut" /></div></div></div>
-    <div class="inspector-section"><h3>Voice override</h3><div class="toggle-row"><span>Use project default</span><button class="switch ${scene.voiceOverride ? "" : "on"}" data-action="toggle-voice-override"></button></div>${scene.voiceOverride ? `<div class="form-stack"><select class="select-input"><option>Vietnamese</option><option>English</option></select><select class="select-input"><option>Vietnamese Documentary Male</option><option>Vietnamese Documentary Female</option></select><select class="select-input"><option>1.10x</option><option>1.12x</option></select></div>` : `<p class="caption">Overrides are intentionally collapsed until needed.</p>`}</div>`;
+    <div class="inspector-section"><h3>Voice override</h3><div class="toggle-row"><span>Use project default</span><button class="switch ${scene.voiceOverride ? "" : "on"}" data-action="toggle-voice-override"></button></div>${scene.voiceOverride ? `<div class="form-stack"><select class="select-input">${optionList(overrideLanguages, state.voiceState.language)}</select><select class="select-input"><option>Vietnamese Documentary Male</option><option>Vietnamese Documentary Female</option></select><select class="select-input"><option>1.10x</option><option>1.12x</option></select></div>` : `<p class="caption">Overrides are intentionally collapsed until needed.</p>`}</div>`;
 }
 
 function renderTimeline() {
@@ -256,7 +340,7 @@ function renderTimeline() {
   $("#timeline").innerHTML = state.sceneState.items.map(scene => `<button class="timeline-scene ${scene.status} ${scene.id === state.sceneState.selectedId ? "selected" : ""}" type="button" data-action="select-scene" data-scene-id="${scene.id}" style="min-width:${Math.max(45, scene.duration * 9 * state.sceneState.timelineZoom)}px"><span>${String(scene.number).padStart(2, "0")}</span><i class="timeline-status"></i><span>${scene.duration}s</span></button>`).join("");
 }
 
-function setScreen(screen) { state.uiState.screen = screen; renderScreen(); }
+function setScreen(screen) { state.uiState.screen = screen; state.uiState.projectMenuOpen = false; renderScreen(); }
 function selectScene(id) { if (state.sceneState.items.some(scene => scene.id === id)) { state.sceneState.selectedId = id; savePulse(); renderScreen(); } }
 function setVoiceSpeed(value) { state.voiceState.speed = Math.min(1.2, Math.max(.85, +Number(value).toFixed(2))); state.voiceState.subtitleSync = "NEEDS UPDATE"; savePulse("Voice changed"); renderScreen(); }
 
@@ -276,8 +360,15 @@ function parseScript() {
   savePulse(); renderScreen();
 }
 
-function mockImport() { toast(`Mock import complete: ${state.sceneState.items.length} scenes detected and numerically sorted.`); savePulse("Import mock saved"); }
-function simulateScenes(count) { state.sceneState.items = makeScenes(count); state.sceneState.sceneCount = count; state.sceneState.selectedId = state.sceneState.items[0].id; state.scriptState.mapped = Math.min(2, count); state.scriptState.missing = Math.max(0, count - state.scriptState.mapped); toast(`Prototype now renders ${count} scenes.`); savePulse(); renderScreen(); }
+function mockImport() {
+  if (!state.sceneState.items.length) { simulateScenes(5); return; }
+  state.projectState.imported = true;
+  if (["DRAFT", "UPLOADED"].includes(state.projectState.stage)) state.projectState.stage = "MAPPED";
+  toast(`Mock import complete: ${state.sceneState.items.length} scenes detected and numerically sorted.`);
+  savePulse("Import mock saved");
+  renderScreen();
+}
+function simulateScenes(count) { state.sceneState.items = makeScenes(count); state.sceneState.sceneCount = count; state.sceneState.selectedId = state.sceneState.items[0]?.id || null; state.scriptState.mapped = Math.min(2, count); state.scriptState.missing = Math.max(0, count - state.scriptState.mapped); state.projectState.imported = count > 0; if (count && ["DRAFT", "UPLOADED"].includes(state.projectState.stage)) state.projectState.stage = "MAPPED"; toast(`Prototype now renders ${count} scenes.`); savePulse(); renderScreen(); }
 function generatePreview() { state.voiceState.previewStatus = "GENERATING…"; state.voiceState.playing = false; renderScreen(); setTimeout(() => { state.voiceState.previewStatus = "READY"; state.voiceState.history.unshift({ id: `take-${Date.now()}`, name: `${state.voiceState.gender === "male" ? "Male" : "Female"} ${state.voiceState.speed.toFixed(2)}`, language: language().label, gender: state.voiceState.gender === "male" ? "Male" : "Female", speed: state.voiceState.speed, duration: "8.0s", created: "Just now" }); toast("Preview generated (mock). No video render started."); savePulse(); renderScreen(); }, 760); }
 function togglePlay() { state.voiceState.playing = !state.voiceState.playing; toast(state.voiceState.playing ? "Playing mock preview…" : "Preview stopped."); renderScreen(); }
 function saveProfile() { const voice = state.voiceState; const id = `profile-${Date.now()}`; voice.profiles.unshift({ id, name: `Custom ${language().label} ${voice.gender === "male" ? "Male" : "Female"}`, provider: voice.provider, language: voice.language, locale: voice.locale, mode: voice.mode, gender: voice.gender, pitch: voice.pitch, speed: voice.speed }); voice.profileId = id; toast("Voice profile saved to prototype state."); savePulse(); renderScreen(); }
@@ -291,6 +382,9 @@ document.addEventListener("click", event => {
   const nav = target.dataset.nav;
   if (nav) { if (target.dataset.sceneId) selectScene(target.dataset.sceneId); setScreen(nav); return; }
   switch (action) {
+    case "open-project-menu": state.uiState.projectMenuOpen = !state.uiState.projectMenuOpen; renderProjectContext(); break;
+    case "select-project": activateProject(target.dataset.projectId); break;
+    case "create-project": createProject(); break;
     case "select-scene": selectScene(target.dataset.sceneId); break;
     case "simulate-scenes": simulateScenes(Number(target.dataset.count)); break;
     case "mock-import": case "choose-zip": case "choose-folder": mockImport(); break;
@@ -330,7 +424,6 @@ document.addEventListener("click", event => {
     case "apply-changes": state.projectState.stage = "NEEDS_CHANGES"; toast("Change request applied to project state.", "warning"); savePulse(); break;
     case "timeline-zoom-in": state.sceneState.timelineZoom = Math.min(1.6, state.sceneState.timelineZoom + .1); renderTimeline(); break;
     case "timeline-zoom-out": state.sceneState.timelineZoom = Math.max(.6, state.sceneState.timelineZoom - .1); renderTimeline(); break;
-    case "open-project-menu": toast("Project switcher is a desktop-shell mock."); break;
     default: break;
   }
 });
@@ -348,6 +441,7 @@ document.addEventListener("change", event => {
   if (setting?.startsWith("audio-")) { const key = setting.replace("audio-", ""); state.audioState[key] = Number(target.value); renderScreen(); }
   if (setting === "request-scene") state.renderState.requestScene = target.value;
   if (setting === "request-category") state.renderState.requestCategory = target.value;
+  if (setting === "project-stage") { state.projectState.stage = target.value; savePulse("Project status updated"); renderScreen(); }
   if (target.dataset.sceneSetting) { const key = target.dataset.sceneSetting; currentScene().edit[key] = key === "speed" || key === "trimStart" ? Number(target.value) : target.value; renderInspector(); renderTimeline(); }
   if (target.dataset.audioSetting) { const key = target.dataset.audioSetting; currentScene().sourceAudio[key] = ["volume", "fadeIn", "fadeOut"].includes(key) ? Number(target.value) : target.value; renderInspector(); }
 });
