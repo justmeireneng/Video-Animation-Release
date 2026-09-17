@@ -7,8 +7,11 @@ machine, and no request is sent to a cloud service by this module.
 from __future__ import annotations
 
 import json
+import hashlib
 import re
+import mimetypes
 import threading
+import uuid
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -58,6 +61,14 @@ class StudioApplication:
         if not path.is_file():
             return fallback or {}
         return json.loads(path.read_text(encoding="utf-8"))
+
+    @staticmethod
+    def _sha256(path: Path) -> str:
+        digest = hashlib.sha256()
+        with path.open("rb") as source:
+            for chunk in iter(lambda: source.read(1024 * 1024), b""):
+                digest.update(chunk)
+        return digest.hexdigest()
 
     def _legacy_summary(self, root: Path) -> dict[str, Any]:
         remotion = self._read_json(root / "remotion.json")
@@ -110,12 +121,16 @@ class StudioApplication:
         script_path = root / "script" / "script.txt"
         if not script_path.is_file():
             script_path = root / "narration.json"
+        report_relative = (manifest.get("source") or {}).get("last_import")
+        report_path = (root / report_relative).resolve() if report_relative else None
+        last_import_report = self._read_json(report_path) if report_path and report_path.is_relative_to(root) else {}
         return {
             "project": manifest,
             "workflow": state,
             "remotion": {key: remotion.get(key) for key in ("fps", "width", "height", "name")},
             "scenes": scenes,
             "script_text": script_path.read_text(encoding="utf-8") if script_path.suffix == ".txt" and script_path.is_file() else "",
+            "last_import_report": last_import_report,
         }
 
     def create_project(self, name: str) -> dict[str, Any]:
@@ -140,21 +155,13 @@ class StudioApplication:
         if not content or len(content) > MAX_UPLOAD_BYTES:
             raise StudioApiError("Invalid ZIP upload size.", HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
         root = self._project_root(project_id)
-        safe_name = re.sub(r"[^A-Za-z0-9._ -]", "_", Path(filename).name).strip(". ") or "source.zip"
-        target = root / "source" / "imported" / safe_name
-        suffix = 2
-        while target.exists():
-            target = target.with_name(f"{target.stem}-{suffix}{target.suffix}")
-            suffix += 1
-        temporary = target.with_suffix(target.suffix + ".uploading")
+        temporary = root / "source" / "imported" / f".incoming-{uuid.uuid4().hex}.zip.uploading"
+        temporary.parent.mkdir(parents=True, exist_ok=True)
         temporary.write_bytes(content)
-        temporary.replace(target)
         try:
-            return ImportService(self.workspace_root, self._project_id(project_id)).import_zip(target)
-        except Exception:
-            # Preserve the uploaded archive for user inspection; only the
-            # working extraction is temporary inside ImportService.
-            raise
+            return self.import_uploaded_zip_file(project_id, filename, temporary)
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def import_uploaded_zip_file(self, project_id: str, filename: str, temporary: Path) -> dict[str, Any]:
         """Atomically store a streamed ZIP upload before validating/importing it."""
@@ -165,6 +172,16 @@ class StudioApplication:
         safe_name = re.sub(r"[^A-Za-z0-9._ -]", "_", Path(filename).name).strip(". ") or "source.zip"
         destination_root = root / "source" / "imported"
         destination_root.mkdir(parents=True, exist_ok=True)
+        manifest = self._read_json(root / "project.json")
+        report_relative = (manifest.get("source") or {}).get("last_import")
+        report_path = (root / report_relative).resolve() if report_relative else None
+        if report_path and report_path.is_relative_to(root) and report_path.is_file():
+            previous = self._read_json(report_path)
+            previous_archive = destination_root / Path(str(previous.get("source", ""))).name
+            if previous.get("valid_files", 0) > 0 and not previous.get("invalid_files") and previous_archive.is_file():
+                if previous_archive.stat().st_size == temporary.stat().st_size and self._sha256(previous_archive) == self._sha256(temporary):
+                    temporary.unlink()
+                    return {**previous, "reused_import": True}
         target = destination_root / safe_name
         suffix = 2
         while target.exists():
@@ -191,6 +208,19 @@ class StudioApplication:
         if status == "rejected":
             return store.reject(scene_id, version)
         raise StudioApiError("Video status must be approved or rejected.")
+
+    def source_video_path(self, project_id: str, scene_id: str) -> Path:
+        root = self._project_root(project_id)
+        if not PROJECT_ID.fullmatch(scene_id):
+            raise StudioApiError("Invalid scene id.", HTTPStatus.NOT_FOUND)
+        metadata = self._read_json(root / "scenes" / scene_id / "metadata.json")
+        active = metadata.get("active_version")
+        record = next((item for item in metadata.get("versions", []) if item.get("version") == active), None)
+        relative = record.get("source_video") if record else None
+        source = (root / relative).resolve() if relative else None
+        if not source or not source.is_relative_to(root) or not source.is_file():
+            raise StudioApiError("Scene source video is unavailable.", HTTPStatus.NOT_FOUND)
+        return source
 
     def update_voice(self, project_id: str, request: dict[str, Any]) -> dict[str, Any]:
         """Persist only controls that the active provider actually reports."""
@@ -269,6 +299,41 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
+    def _video(self, path: Path) -> None:
+        size = path.stat().st_size
+        start, end = 0, size - 1
+        range_header = self.headers.get("Range")
+        if range_header:
+            match = re.fullmatch(r"bytes=(\d*)-(\d*)", range_header.strip())
+            if not match or not size or (not match.group(1) and not match.group(2)):
+                raise StudioApiError("Invalid video byte range.", HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+            if match.group(1):
+                start = int(match.group(1))
+                end = min(int(match.group(2)), size - 1) if match.group(2) else size - 1
+            else:
+                start = max(0, size - int(match.group(2)))
+            if start > end or start >= size:
+                raise StudioApiError("Video byte range is outside the file.", HTTPStatus.REQUESTED_RANGE_NOT_SATISFIABLE)
+        self.send_response(HTTPStatus.PARTIAL_CONTENT if range_header else HTTPStatus.OK)
+        self.send_header("Content-Type", mimetypes.guess_type(path.name)[0] or "application/octet-stream")
+        self.send_header("Accept-Ranges", "bytes")
+        self.send_header("Content-Length", str(end - start + 1))
+        if range_header:
+            self.send_header("Content-Range", f"bytes {start}-{end}/{size}")
+        self.end_headers()
+        try:
+            with path.open("rb") as source:
+                source.seek(start)
+                remaining = end - start + 1
+                while remaining:
+                    chunk = source.read(min(1024 * 1024, remaining))
+                    if not chunk:
+                        break
+                    self.wfile.write(chunk)
+                    remaining -= len(chunk)
+        except (BrokenPipeError, ConnectionResetError):
+            pass  # Browser stopped playback or switched to another scene.
+
     def _body_json(self) -> dict[str, Any]:
         length = int(self.headers.get("Content-Length", "0"))
         if length <= 0 or length > 2 * 1024 * 1024:
@@ -295,6 +360,9 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
             if parts == ["api", "projects"]:
                 self._json(HTTPStatus.OK, {"projects": self.app.list_projects()})
                 return
+            if len(parts) == 6 and parts[:2] == ["api", "projects"] and parts[3] == "scenes" and parts[5] == "source":
+                self._video(self.app.source_video_path(parts[2], parts[4]))
+                return
             if len(parts) == 3 and parts[:2] == ["api", "projects"]:
                 self._json(HTTPStatus.OK, self.app.project(parts[2]))
                 return
@@ -319,19 +387,22 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
                 length = int(self.headers.get("Content-Length", "0"))
                 if length <= 0 or length > MAX_UPLOAD_BYTES:
                     raise StudioApiError("Invalid ZIP upload size.", HTTPStatus.REQUEST_ENTITY_TOO_LARGE)
-                filename = self.headers.get("X-File-Name", "source.zip")
+                filename = unquote(self.headers.get("X-File-Name", "source.zip"))
                 root = self.app._project_root(parts[2])
-                temporary = root / "source" / "imported" / ".incoming.zip.uploading"
+                temporary = root / "source" / "imported" / f".incoming-{uuid.uuid4().hex}.zip.uploading"
                 temporary.parent.mkdir(parents=True, exist_ok=True)
-                remaining = length
-                with temporary.open("wb") as target:
-                    while remaining:
-                        chunk = self.rfile.read(min(1024 * 1024, remaining))
-                        if not chunk:
-                            raise StudioApiError("ZIP upload ended before Content-Length was received.")
-                        target.write(chunk)
-                        remaining -= len(chunk)
-                self._json(HTTPStatus.OK, self.app.import_uploaded_zip_file(parts[2], filename, temporary))
+                try:
+                    remaining = length
+                    with temporary.open("wb") as target:
+                        while remaining:
+                            chunk = self.rfile.read(min(1024 * 1024, remaining))
+                            if not chunk:
+                                raise StudioApiError("ZIP upload ended before Content-Length was received.")
+                            target.write(chunk)
+                            remaining -= len(chunk)
+                    self._json(HTTPStatus.OK, self.app.import_uploaded_zip_file(parts[2], filename, temporary))
+                finally:
+                    temporary.unlink(missing_ok=True)
                 return
             if len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] == "script":
                 body = self._body_json()

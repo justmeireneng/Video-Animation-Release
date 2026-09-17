@@ -72,6 +72,7 @@ const state = {
   workflowState: { scriptApproved: false, voiceApproved: false, previewReady: false },
   reviewState: { finalized: false, dirty: false },
   automationState: { status: "SOURCE READY", progress: 100, step: 1 },
+  importReport: null,
   renderState: { quality: "preview", status: "READY", progress: 0, activeStep: -1, requestScene: "scene_11", requestCategory: "Source" },
   uiState: { screen: "dashboard", inspector: "scene", projectMenuOpen: false },
 };
@@ -108,11 +109,12 @@ function applyBackendProject(detail) {
   const manifest = detail.project || {};
   const remotion = detail.remotion || {};
   const voice = manifest.voice || {};
-  const summary = projectSummaryForUi({ id: manifest.id, name: manifest.name, status: detail.workflow?.status || manifest.status, scene_count: detail.scenes?.length, imported: manifest.source?.imported });
+  const summary = projectSummaryForUi({ id: manifest.id, name: manifest.name, status: manifest.status || detail.workflow?.status, scene_count: detail.scenes?.length, imported: manifest.source?.imported });
   const existing = state.workspaceState.projects.find(item => item.id === summary.id);
   if (existing) Object.assign(existing, summary); else state.workspaceState.projects.unshift(summary);
   state.workspaceState.activeProjectId = summary.id;
   state.projectState = { id: summary.id, name: summary.name, initials: summary.initials, stage: summary.stage, resolution: `${remotion.width || 1080} × ${remotion.height || 1920}`, aspect: "9:16", fps: remotion.fps || 30, imported: summary.imported };
+  state.importReport = detail.last_import_report || null;
   state.sceneState = {
     items: (detail.scenes || []).map(item => {
       const video = item.video || {};
@@ -121,7 +123,7 @@ function applyBackendProject(detail) {
       const timing = current.timing || {};
       return {
         id: item.id, number: item.number, title: `Scene ${String(item.number).padStart(2, "0")}`,
-        narration: item.narration || "", source: current.source_provider ? "Google Flow" : "Missing",
+        narration: item.narration || "", source: current.source_provider ? "Google Flow" : "Missing", sourceFilename: current.source_filename || "",
         sourceVersion: current.version || 0, duration: +(current.probe?.duration || Math.max(1, item.duration_in_frames / (remotion.fps || 30))).toFixed(1),
         status: current.status || video.status || "missing", sourceAudio: { mode: audio.mode || "mute", volume: Math.round((audio.volume || 0) * 100), duck: Boolean(audio.duck_under_narration), fadeIn: audio.fade_in || 0, fadeOut: audio.fade_out || 0 },
         edit: { trimStart: current.trim?.start || 0, trimEnd: current.trim?.end || null, speed: timing.playback_rate || 1, crop: current.crop?.mode || "cover", position: "center", holdLastFrame: Boolean(timing.hold_last_frame), transition: item.transition || "none" },
@@ -309,19 +311,24 @@ function renderDashboard() {
 function renderImport() {
   const total = state.sceneState.items.length;
   const auto = state.automationState;
-  const autoSteps = ["Detect ZIP structure", "Sort Scene_<number>", "Validate source files", "Open Script Mapping"];
-  return `<section class="screen">${screenHeader("Import Google Flow source", `Bring a ZIP or folder into ${activeProject().name}. The app detects and orders scenes automatically, then stops for your scene-by-scene script mapping.`, `<button class="button-secondary" data-action="run-auto-prep" ${auto.status === "RUNNING" ? "disabled" : ""}>${auto.status === "RUNNING" ? "Preparing…" : "Prepare source"}</button>`)}
-    <div class="import-dropzone" id="dropzone"><div><div class="drop-icon">⇩</div><h2>DROP GOOGLE FLOW ZIP HERE</h2><p class="caption">The future app parses ZIP files locally. It will not upload the source to a cloud service.</p><div class="drop-actions"><button class="button" data-action="choose-zip">Choose ZIP & Run</button><button class="button-secondary" data-action="choose-folder">Choose Folder & Run</button></div></div></div>
-    <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Dynamic scene count</p><h2 class="card-title">Simulate source sizes before building backend</h2></div></div><div class="simulator-row">${[5, 14, 24].map(count => `<button class="chip-button ${total === count ? "active" : ""}" data-action="simulate-scenes" data-count="${count}">Simulate ${count} Scenes</button>`).join("")}</div></section>
-    <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Last mock import</p><h2 class="card-title">Scene_<number> files sorted numerically</h2></div><span class="status-tag ${total ? "ready" : "pending"}">${total ? "Mapped" : "Waiting for source"}</span></div><div class="upload-report"><div class="report-cell"><b>${total}</b><span>Videos detected</span></div><div class="report-cell"><b>${total ? Math.max(0, total - 1) : 0}</b><span>Mapped</span></div><div class="report-cell"><b>${total ? 1 : 0}</b><span>Duplicates</span></div><div class="report-cell"><b>${total ? 1 : 0}</b><span>Missing</span></div><div class="report-cell"><b>0</b><span>Invalid</span></div></div></section>
-    <section class="card card-pad auto-prep-card" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Automatic source preparation</p><h2 class="card-title">${auto.status}</h2></div><span class="caption">${auto.progress}%</span></div><p class="caption">Automation prepares only source intake. Script mapping, voice direction, and final cut decisions remain manual approvals.</p><div class="progress-track"><i style="width:${auto.progress}%"></i></div><div class="auto-prep-list">${autoSteps.map((step, index) => `<div class="${index < auto.step ? "done" : index === auto.step && auto.status === "RUNNING" ? "active" : ""}"><span>${index < auto.step ? "✓" : index + 1}</span><b>${step}</b><small>${index < auto.step ? "Done" : index === auto.step && auto.status === "RUNNING" ? "Running…" : "Waiting"}</small></div>`).join("")}</div></section>
+  const report = state.importReport;
+  const rows = (report?.scene_map || []).map(row => {
+    const scene = state.sceneState.items.find(item => item.number === row.scene_number);
+    const status = scene?.status || row.status;
+    const sourceUrl = `${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/scenes/${encodeURIComponent(scene?.id || "")}/source`;
+    return `<div class="validation-row"><span class="${status === "invalid" ? "warning" : "check"}">${status === "invalid" ? "▲" : "✓"}</span><div><b>Scene ${String(row.scene_number).padStart(2, "0")}</b><span class="muted">${escapeHtml(row.source_filename || "Unknown file")} · ${escapeHtml(status)}</span>${row.error ? `<small class="warning">${escapeHtml(row.error)}</small>` : ""}${backendOnline && scene?.sourceVersion && status !== "invalid" ? `<video class="source-review-video" controls preload="metadata" src="${sourceUrl}"></video><small class="muted">Original source clip · no render</small>` : ""}${backendOnline && scene?.sourceVersion && status === "pending_review" ? `<div style="margin-top:6px"><button class="button-secondary" data-action="review-import-source" data-scene-id="${escapeHtml(scene.id)}" data-status="approved">Approve this source</button> <button class="button-quiet" data-action="review-import-source" data-scene-id="${escapeHtml(scene.id)}" data-status="rejected">Flag</button></div>` : ""}</div></div>`;
+  }).join("");
+  return `<section class="screen">${screenHeader("Import Google Flow source", `Import a ZIP or folder into ${escapeHtml(activeProject().name)}. Check the video-to-scene order here, then map your narration in the next step.`, `<button class="button-secondary" data-action="run-auto-prep" ${auto.status === "RUNNING" ? "disabled" : ""}>${auto.status === "RUNNING" ? "Importing…" : "Choose source ZIP"}</button>`)}
+    <div class="import-dropzone" id="dropzone"><div><div class="drop-icon">⇩</div><h2>DROP GOOGLE FLOW ZIP HERE</h2><p class="caption">ZIP stays on this computer. Numbered filenames map directly; generic Flow filenames follow ZIP order and require your review.</p><div class="drop-actions"><button class="button" data-action="choose-zip" ${auto.status === "RUNNING" ? "disabled" : ""}>Choose ZIP</button><button class="button-secondary" data-action="choose-folder" ${auto.status === "RUNNING" ? "disabled" : ""}>Choose Folder</button></div></div></div>
+    <section class="card card-pad auto-prep-card" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Local import</p><h2 class="card-title">${escapeHtml(auto.status)}</h2></div><span class="caption">${auto.progress}%</span></div><p class="caption">${auto.status === "RUNNING" ? "Uploading locally, then validating video metadata. Larger ZIPs may take a moment after upload reaches 100%." : "No video render starts during import."}</p><div class="progress-track"><i style="width:${auto.progress}%"></i></div></section>
+    <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">${report ? "Last import" : "Scene mapping"}</p><h2 class="card-title">${report?.mapping_requires_review ? "Review inferred ZIP order" : "Source files by scene"}</h2></div><span class="status-tag ${report?.valid_files ? "review" : "pending"}">${report?.valid_files ? "Ready for your review" : "Waiting for source"}</span></div><div class="upload-report"><div class="report-cell"><b>${report?.files_found ?? 0}</b><span>Videos found</span></div><div class="report-cell"><b>${report?.valid_files ?? 0}</b><span>Valid</span></div><div class="report-cell"><b>${report?.scene_map?.length ?? 0}</b><span>Mapped</span></div><div class="report-cell"><b>${report?.missing_scenes?.length ?? 0}</b><span>Missing</span></div><div class="report-cell"><b>${report?.invalid_files?.length ?? 0}</b><span>Invalid</span></div></div>${report?.warnings?.length ? `<p class="caption" style="margin-top:12px">${report.warnings.map(escapeHtml).join(" · ")}</p>` : ""}<div style="margin-top:12px">${rows || `<p class="caption">No videos mapped yet. Choose a ZIP to begin.</p>`}</div>${report?.valid_files ? `<button class="button" data-nav="script" style="margin-top:14px">Review mapping & add narration →</button>` : ""}</section>
   </section>`;
 }
 
 function renderScript() {
   if (!state.sceneState.items.length) return `<section class="screen">${screenHeader("Script Mapping", "Import a source ZIP first. Scene slots are created from the detected source files.", `<button class="button" data-nav="import">Import source</button>`)}<div class="empty-state"><div><h2>No scene slots yet</h2><p>Once the ZIP has been scanned, paste a script with SCENE blocks and review the proposed mapping here.</p></div></div></section>`;
   const allMapped = state.scriptState.mapped === state.sceneState.items.length;
-  const previewRows = state.sceneState.items.map(scene => `<div class="validation-row"><span class="${scene.narration ? "check" : "warning"}">${scene.narration ? "✓" : "▲"}</span><div><b>Scene ${String(scene.number).padStart(2, "0")}</b><span class="muted">Source ready · Script ${scene.narration ? "mapped" : "missing"}</span>${scene.narration ? `<small class="muted">${escapeHtml(scene.narration.length > 96 ? `${scene.narration.slice(0, 96)}…` : scene.narration)}</small>` : ""}</div></div>`).join("");
+  const previewRows = state.sceneState.items.map(scene => `<div class="validation-row"><span class="${scene.narration ? "check" : "warning"}">${scene.narration ? "✓" : "▲"}</span><div><b>Scene ${String(scene.number).padStart(2, "0")}</b><span class="muted">${escapeHtml(scene.sourceFilename || "Source missing")} · Script ${scene.narration ? "mapped" : "missing"}</span>${scene.narration ? `<small class="muted">${escapeHtml(scene.narration.length > 96 ? `${scene.narration.slice(0, 96)}…` : scene.narration)}</small>` : ""}</div></div>`).join("");
   return `<section class="screen">${screenHeader("Script Mapping", "Paste the script you want for each scene. The app proposes the mapping; you inspect it and approve it before voice or rendering can continue.", `<button class="button-secondary" data-action="parse-script">Map & review</button><button class="button" data-action="approve-script-mapping" ${allMapped && !state.scriptState.approved ? "" : "disabled"}>${state.scriptState.approved ? "Mapping approved" : "Approve mapping"}</button>`)}
     <div class="script-layout"><section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Your scene script</p><h2 class="card-title">Narration by scene</h2></div><span class="caption">${state.scriptState.mapped} / ${state.sceneState.items.length} mapped</span></div><label class="field-label">Paste format <small>SCENE 1 → Narration: → “text”</small></label><textarea id="bulk-script" class="textarea-input">${escapeHtml(state.scriptState.bulkText)}</textarea><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span class="caption">Mapping stays in draft until you approve it. Nothing is rendered yet.</span><button class="button" data-action="parse-script">Parse & review</button></div></section>
       <aside class="card card-pad"><div class="card-head"><div><p class="eyebrow">Mapping review</p><h2 class="card-title">Confirm every scene</h2></div><span class="status-tag ${state.scriptState.approved ? "ready" : allMapped ? "review" : "pending"}">${state.scriptState.approved ? "Approved" : allMapped ? "Ready to approve" : `${state.scriptState.missing} missing`}</span></div>${previewRows}<button class="button-secondary" data-action="approve-script-mapping" ${allMapped && !state.scriptState.approved ? "" : "disabled"} style="margin-top:12px;width:100%">${state.scriptState.approved ? "Mapping approved" : "Approve & continue to Voice"}</button></aside></div>
@@ -522,6 +529,7 @@ function approveVoice() {
 
 function runAutoPrep() {
   if (state.automationState.status === "RUNNING") return;
+  if (backendOnline) { $("#source-zip-input")?.click(); return; }
   if (!state.sceneState.items.length) {
     state.sceneState.items = makeScenes(5);
     state.sceneState.sceneCount = 5;
@@ -557,22 +565,51 @@ function runAutoPrep() {
 }
 function importZipFile(file) {
   if (!file || !backendOnline) return;
+  if (state.automationState.status === "RUNNING") return;
   if (!file.name.toLowerCase().endsWith(".zip")) { toast("Choose a ZIP file exported from Flow.", "warning"); return; }
-  state.automationState = { status: "RUNNING", progress: 15, step: 0 };
+  const projectId = state.projectState.id;
+  state.automationState = { status: "RUNNING", progress: 0, step: 0 };
+  state.uiState.screen = "import";
   renderScreen();
-  apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/import-zip`, { method: "POST", headers: { "X-File-Name": file.name, "Content-Type": "application/zip" }, body: file })
-    .then(() => loadBackendProject(state.projectState.id))
-    .then(() => { state.uiState.screen = "script"; toast("ZIP imported locally. Review video versions and map the script."); renderScreen(); })
-    .catch(error => { state.automationState = { status: "ERROR", progress: 0, step: 0 }; toast(error.message, "warning"); renderScreen(); });
+  const request = new XMLHttpRequest();
+  request.open("POST", `${STUDIO_API}/projects/${encodeURIComponent(projectId)}/import-zip`);
+  request.setRequestHeader("X-File-Name", encodeURIComponent(file.name));
+  request.setRequestHeader("Content-Type", "application/zip");
+  request.upload.onprogress = event => {
+    if (event.lengthComputable && state.projectState.id === projectId) {
+      state.automationState.progress = Math.min(90, Math.round(event.loaded / event.total * 90));
+      renderScreen();
+    }
+  };
+  request.upload.onload = () => {
+    if (state.projectState.id === projectId) { state.automationState.progress = 95; renderScreen(); }
+  };
+  request.onload = async () => {
+    let payload = {};
+    try { payload = JSON.parse(request.responseText); } catch (_) { /* Show HTTP status below. */ }
+    if (request.status < 200 || request.status >= 300) {
+      state.automationState = { status: "ERROR", progress: 0, step: 0 };
+      toast(payload.error || `Import failed (HTTP ${request.status})`, "warning"); renderScreen(); return;
+    }
+    try {
+      await loadBackendProject(projectId);
+      state.uiState.screen = "import";
+      toast(`${payload.valid_files} video(s) mapped. Review the scene order, then add narration.`);
+      renderScreen();
+    } catch (error) { state.automationState = { status: "ERROR", progress: 0, step: 0 }; toast(error.message, "warning"); renderScreen(); }
+  };
+  request.onerror = () => { state.automationState = { status: "ERROR", progress: 0, step: 0 }; toast("Connection to the local studio server was lost during ZIP import.", "warning"); renderScreen(); };
+  request.send(file);
 }
 function chooseFolderPath() {
   if (!backendOnline) { runAutoPrep(); return; }
   const path = window.prompt("Full local path to the Flow source folder");
   if (!path?.trim()) return;
+  state.automationState = { status: "RUNNING", progress: 95, step: 2 }; renderScreen();
   apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/import-path`, { method: "POST", body: JSON.stringify({ path: path.trim() }) })
     .then(() => loadBackendProject(state.projectState.id))
-    .then(() => { state.uiState.screen = "script"; toast("Folder imported locally."); renderScreen(); })
-    .catch(error => toast(error.message, "warning"));
+    .then(() => { state.uiState.screen = "import"; toast("Folder mapped. Review video order before adding narration."); renderScreen(); })
+    .catch(error => { state.automationState = { status: "ERROR", progress: 0, step: 0 }; toast(error.message, "warning"); renderScreen(); });
 }
 function mockImport() { if (backendOnline) { $("#source-zip-input")?.click(); return; } toast("Start the local studio server before importing a source.", "warning"); }
 function simulateScenes(count) { toast("Use a real Flow ZIP or folder for this project.", "warning"); }
@@ -582,12 +619,12 @@ function saveProfile() { const voice = state.voiceState; const id = `profile-${D
 function useProfile(id) { const profile = state.voiceState.profiles.find(item => item.id === id); if (!profile) return; Object.assign(state.voiceState, { profileId: id, language: profile.language, locale: profile.locale, mode: profile.mode, gender: profile.gender, pitch: profile.pitch, speed: profile.speed, subtitleSync: "NEEDS UPDATE" }); toast(`${profile.name} applied.`); markVoiceChanged("Voice profile changed"); }
 function startRender(quality) { if (backendOnline) { toast("Rendering remains blocked until the local OmniVoice narration gate passes; no mock video is produced in a real project.", "warning"); return; } if (!state.workflowState.scriptApproved || !state.workflowState.voiceApproved) { toast("Approve script mapping and voice before rendering.", "warning"); return; } if (!keptScenes().length) { toast("Keep at least one scene before rendering.", "warning"); return; } const render = state.renderState; state.projectState.stage = "RENDERING"; render.quality = quality; render.status = `RENDERING ${quality.toUpperCase()}`; render.progress = 0; render.activeStep = 0; renderScreen(); const interval = setInterval(() => { render.progress = Math.min(100, render.progress + 9); render.activeStep = Math.min(5, Math.floor(render.progress / 17)); renderScreen(); if (render.progress >= 100) { clearInterval(interval); render.status = quality === "final" ? "FINAL READY FOR REVIEW" : "PREVIEW READY"; render.activeStep = 6; state.workflowState.previewReady = true; state.reviewState.dirty = false; state.projectState.stage = "POST_RENDER_REVIEW"; state.uiState.screen = "scenes"; toast(`${quality === "final" ? "Final" : "Preview"} render complete (mock). Watch it before exporting.`); savePulse("Preview ready for final review"); renderScreen(); } }, 280); }
 
-function setBackendVideoStatus(status) {
-  const scene = currentScene();
+function setBackendVideoStatus(status, sceneId = currentScene()?.id) {
+  const scene = state.sceneState.items.find(item => item.id === sceneId);
   if (!backendOnline || !scene?.sourceVersion) return false;
   apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/scenes/${encodeURIComponent(scene.id)}/video`, { method: "POST", body: JSON.stringify({ version: scene.sourceVersion, status }) })
     .then(() => loadBackendProject(state.projectState.id))
-    .then(() => toast(status === "approved" ? "Source version approved." : "Source version flagged for replacement.", status === "approved" ? "success" : "warning"))
+    .then(() => { state.sceneState.selectedId = scene.id; renderScreen(); toast(status === "approved" ? "Source version approved." : "Source version flagged for replacement.", status === "approved" ? "success" : "warning"); })
     .catch(error => toast(error.message, "warning"));
   return true;
 }
@@ -624,12 +661,13 @@ document.addEventListener("click", event => {
     case "approve-voice": approveVoice(); break;
     case "approve-scene": if (!setBackendVideoStatus("approved")) { currentScene().status = "approved"; toast("Scene approved."); savePulse(); renderScreen(); } break;
     case "reject-scene": if (!setBackendVideoStatus("rejected")) { currentScene().status = "rejected"; toast("Scene marked for replacement.", "warning"); savePulse(); renderScreen(); } break;
+    case "review-import-source": setBackendVideoStatus(target.dataset.status, target.dataset.sceneId); break;
     case "approve-all": state.sceneState.items.forEach(scene => { if (scene.status === "pending") scene.status = "approved"; }); toast("Visible pending scenes approved."); renderScreen(); break;
     case "set-scene-decision": if (!state.workflowState.previewReady) { toast("Watch a preview before deciding Keep or Cut.", "warning"); break; } currentScene().decision = target.dataset.decision; markReviewDirty(); toast(`Scene ${String(currentScene().number).padStart(2, "0")} marked ${target.dataset.decision}.`); savePulse("Cut decision saved"); renderScreen(); break;
     case "keep-all-scenes": if (!state.workflowState.previewReady) { toast("Watch a preview before deciding Keep or Cut.", "warning"); break; } state.sceneState.items.forEach(scene => { scene.decision = "keep"; }); markReviewDirty(); toast("All scenes marked keep."); savePulse("Cut decisions saved"); renderScreen(); break;
     case "toggle-cut-filter": state.reviewState.showCutsOnly = !state.reviewState.showCutsOnly; renderScreen(); break;
     case "finalize-review": if (!keptScenes().length) { toast("Keep at least one scene before finalizing.", "warning"); break; } state.uiState.screen = "render"; toast(`${keptScenes().length} kept scenes ready for a new preview.`); renderScreen(); break;
-    case "replace-source": currentScene().source = "Google Flow"; currentScene().sourceVersion += 1; currentScene().status = "pending"; toast("Source replacement queued (mock).", "warning"); renderScreen(); break;
+    case "replace-source": if (backendOnline) { state.uiState.screen = "import"; toast("Import a replacement ZIP or folder; existing versions remain available."); renderScreen(); } else { currentScene().source = "Google Flow"; currentScene().sourceVersion += 1; currentScene().status = "pending"; toast("Source replacement queued (mock).", "warning"); renderScreen(); } break;
     case "toggle-hold": currentScene().edit.holdLastFrame = !currentScene().edit.holdLastFrame; persistSceneEdit("hold_last_frame", { enabled: currentScene().edit.holdLastFrame }); markReviewDirty(); savePulse("Video edit changed"); renderInspector(); break;
     case "toggle-duck": currentScene().sourceAudio.duck = !currentScene().sourceAudio.duck; persistSceneEdit("source_audio", { mode: currentScene().sourceAudio.mode, volume: currentScene().sourceAudio.volume / 100, duck: currentScene().sourceAudio.duck, fade_in: currentScene().sourceAudio.fadeIn, fade_out: currentScene().sourceAudio.fadeOut }); markReviewDirty(); savePulse("Source audio changed"); renderInspector(); break;
     case "toggle-voice-override": currentScene().voiceOverride = currentScene().voiceOverride ? null : { language: state.voiceState.language, speed: state.voiceState.speed }; renderInspector(); break;

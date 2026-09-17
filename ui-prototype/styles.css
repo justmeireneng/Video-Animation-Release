@@ -176,6 +176,9 @@ button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-
 .form-stack { display: grid; gap: 12px; }
 .validation-row { display: flex; align-items: center; gap: 8px; padding: 8px 0; border-bottom: 1px solid var(--line-soft); font-size: 12px; }
 .validation-row:last-child { border: 0; }
+.validation-row > div { min-width: 0; flex: 1; }
+.validation-row b, .validation-row .muted, .validation-row small { display: block; overflow-wrap: anywhere; line-height: 1.45; }
+.source-review-video { display: block; width: min(100%, 390px); max-height: 230px; margin: 8px 0 4px; border-radius: 8px; background: #000; }
 .check { color: var(--green); } .warning { color: var(--amber); } .error { color: var(--red); }
 
 .scene-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 13px; }

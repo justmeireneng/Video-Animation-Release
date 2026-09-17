@@ -11,7 +11,7 @@ from pathlib import Path, PurePosixPath
 from typing import Any, Callable
 
 from src.services.project_state import ProjectStateService
-from src.services.scene_mapper import SceneMapper
+from src.services.scene_mapper import MEDIA_EXTENSIONS, SceneFile, SceneMapper
 from src.services.studio_project import LocalProjectManager
 from src.video.scene_source_manager import SceneVideoStore
 
@@ -34,7 +34,6 @@ class ImportService:
         archive = Path(zip_path).resolve()
         if not archive.is_file() or not zipfile.is_zipfile(archive):
             raise ValueError(f"Not a readable ZIP archive: {archive}")
-        self.state.set("UPLOADED", archive.name)
         with tempfile.TemporaryDirectory(prefix="flow-import-") as temp:
             root = Path(temp)
             original_names: dict[Path, str] = {}
@@ -49,8 +48,7 @@ class ImportService:
                     if member.flag_bits & 0x1:
                         raise ValueError(f"Encrypted ZIP entries are not supported: {member.filename}")
                     destination = self._safe_zip_destination(root, member.filename, index)
-                    if member.is_dir():
-                        destination.mkdir(parents=True, exist_ok=True)
+                    if member.is_dir() or PurePosixPath(member.filename).suffix.lower() not in MEDIA_EXTENSIONS:
                         continue
                     destination.parent.mkdir(parents=True, exist_ok=True)
                     with package.open(member) as source, destination.open("wb") as target:
@@ -75,12 +73,22 @@ class ImportService:
         folder = Path(folder_path).resolve()
         if not folder.is_dir():
             raise FileNotFoundError(folder)
-        self.state.set("UPLOADED", folder.name)
         return self._import_folder(folder, source_label=folder.name)
 
     def _import_folder(self, folder: Path, source_label: str,
                        original_names: dict[Path, str] | None = None) -> dict[str, Any]:
         found, unmatched = SceneMapper.scan(folder)
+        if not found and not unmatched:
+            raise ValueError("No supported video files found in the ZIP or folder (.mp4, .mov, .mkv, .webm, .m4v).")
+        self.state.set("UPLOADED", source_label)
+        inferred = False
+        if not found and unmatched:
+            # Flow's current export names need not contain Scene_<number>.
+            # Keep ZIP entry order; for folders use the stable scan order.
+            ordered = [path for path in (original_names or {}) if path in unmatched] if original_names else unmatched
+            found = [SceneFile(path=path, number=index) for index, path in enumerate(ordered, 1)]
+            unmatched = []
+            inferred = True
         project = json.loads(self.store.remotion_path.read_text(encoding="utf-8"))
         # New desktop projects start without pre-authored scene slots.  Build
         # those slots directly from the numeric Flow filenames, preserving
@@ -92,6 +100,8 @@ class ImportService:
         records: list[dict[str, Any]] = []
         invalid: list[dict[str, str]] = []
         warnings: list[str] = [f"Unmatched filename: {path.name}" for path in unmatched]
+        if inferred:
+            warnings.append("Scene numbers inferred from ZIP entry order; review each source-to-scene mapping before approving the script.")
         mapped_numbers: set[int] = set()
         for item in found:
             scene_id = mapping.get(item.number)
@@ -108,9 +118,13 @@ class ImportService:
             records.append({"scene_number": item.number, "scene_id": scene_id, **record})
             if record["status"] == "invalid":
                 invalid.append({"scene_id": scene_id, "file": item.path.name, "error": record.get("error", "invalid media")})
+        if not records:
+            raise ValueError("No videos could be mapped to this project's scenes. Check the filenames and project scene slots.")
         missing = [scene_id for number, scene_id in sorted(mapping.items()) if number not in mapped_numbers]
         report = {
             "source": source_label,
+            "mapping_strategy": "zip_order" if inferred and original_names is not None else "folder_order" if inferred else "scene_number",
+            "mapping_requires_review": inferred,
             "created_at": datetime.now(timezone.utc).isoformat(),
             "files_found": len(found) + len(unmatched),
             "valid_files": sum(1 for item in records if item["status"] != "invalid"),
@@ -148,10 +162,10 @@ class ImportService:
             manifest = self.projects.load(self.project_name)
             manifest["source"] = {
                 **dict(manifest.get("source") or {}),
-                "imported": bool(records),
+                "imported": bool(report["valid_files"]),
                 "last_import": report_path.relative_to(self.project_root).as_posix(),
                 "scene_count": len(mapping),
             }
-            manifest["status"] = "SCRIPT_MAPPING" if records else "NEEDS_CHANGES"
+            manifest["status"] = "SCRIPT_MAPPING" if report["valid_files"] and not invalid else "NEEDS_CHANGES"
             self.projects.save(self.project_name, manifest)
         return report

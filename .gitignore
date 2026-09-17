@@ -6,6 +6,7 @@ __pycache__/
 
 # Environments & Virtual Envs
 .venv/
+.venv-omnivoice/
 env/
 venv/
 ENV/
@@ -62,7 +63,9 @@ projects/*/project-state.json
 projects/*/voice-control-state.json
 projects/*/output/voice_previews/
 projects/*/imports/
-projects/*/scenes/*/source/*.mp4
+projects/*/source/imported/*.zip
+projects/*/source/imported/*.uploading
+projects/*/scenes/*/source/*
 
 # OS / IDE generated files
 .DS_Store

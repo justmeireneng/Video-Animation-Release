@@ -20,7 +20,14 @@ send projects or source media to a cloud service.
    ZIP entries are checked for path traversal, encryption, entry count and
    uncompressed size before import. Filenames matching
    `Scene[_ -]?(\d+)` are sorted numerically; gaps remain visible as missing
-   scene slots rather than being renumbered.
+   scene slots rather than being renumbered. If all Flow filenames are generic,
+   videos map to Scene 1, 2, ... in ZIP entry order. The Import screen shows
+   the source filename beside each proposed scene so you can check that order
+   before approving narration. An archive with no supported video reports an
+   error instead of silently continuing. Re-uploading an already successful
+   identical ZIP reuses its import rather than creating extra versions. The
+   Import screen can play each original clip locally (byte-range streaming),
+   without generating a preview render.
 3. Inspect and approve the immutable `flow_vN` source version for each scene.
    An original source file is never overwritten.
 4. Paste or import the per-scene script, then approve its mapping. The text is

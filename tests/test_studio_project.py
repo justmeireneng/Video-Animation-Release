@@ -1,7 +1,7 @@
 import json
 import tempfile
 import unittest
-from urllib.request import urlopen
+from urllib.request import Request, urlopen
 from pathlib import Path
 
 from src.services.import_service import ImportService
@@ -64,6 +64,19 @@ class TestStudioProject(unittest.TestCase):
         self.assertEqual(report["scene_map"][0]["source_extension"], ".mov")
         self.assertTrue((self.project / "scenes" / "scene_03" / "source" / "flow_v1.mov").is_file())
 
+    def test_generic_zip_creates_scene_slots_and_exposes_mapping_in_project_api(self):
+        import zipfile
+        archive = self.root / "flow.zip"
+        with zipfile.ZipFile(archive, "w") as package:
+            package.writestr("Flow_Second.mp4", b"clip2")
+            package.writestr("Flow_First.mp4", b"clip1")
+        report = ImportService(self.root, self.project_id, prober=fake_probe).import_zip(archive)
+        self.assertEqual([row["scene_id"] for row in report["scene_map"]], ["scene_01", "scene_02"])
+        detail = StudioApplication(self.root).project(self.project_id)
+        self.assertEqual(detail["last_import_report"]["mapping_strategy"], "zip_order")
+        self.assertEqual([row["source_filename"] for row in detail["last_import_report"]["scene_map"]],
+                         ["Flow_Second.mp4", "Flow_First.mp4"])
+
     def test_script_maps_exact_scene_numbers_and_requires_complete_approval(self):
         self.manager.ensure_scene_slots(self.project_id, [1, 3])
         service = ScriptService(self.root, self.project_id)
@@ -112,6 +125,24 @@ class TestStudioProject(unittest.TestCase):
             self.assertEqual(payload["projects"][0]["id"], self.project_id)
             with urlopen(f"http://127.0.0.1:{port}/", timeout=5) as response:
                 self.assertIn(b"Local Studio", response.read())
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+    def test_local_source_preview_supports_video_byte_ranges(self):
+        source = self.root / "Scene_1.mp4"
+        source.write_bytes(b"clip-video")
+        ImportService(self.root, self.project_id, prober=fake_probe).import_folder(self.root)
+        ui_root = self.root / "ui"
+        ui_root.mkdir()
+        server, thread = run_server_in_thread(self.root, ui_root)
+        try:
+            url = f"http://127.0.0.1:{server.server_address[1]}/api/projects/{self.project_id}/scenes/scene_01/source"
+            with urlopen(Request(url, headers={"Range": "bytes=1-3"}), timeout=5) as response:
+                self.assertEqual(response.status, 206)
+                self.assertEqual(response.headers["Content-Range"], "bytes 1-3/10")
+                self.assertEqual(response.read(), b"lip")
         finally:
             server.shutdown()
             thread.join(timeout=5)

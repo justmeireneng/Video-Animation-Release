@@ -93,6 +93,34 @@ class TestFlowImport(unittest.TestCase):
         self.assertEqual(report["scene_map"][0]["source_filename"], "Scene_2:corrupt.mp4")
         self.assertTrue((self.root / "projects" / "Demo" / "scenes" / "shot_2" / "source" / "flow_v1.mp4").is_file())
 
+    def test_generic_flow_names_follow_zip_entry_order_and_require_review(self):
+        archive = self.root / "flow-generic.zip"
+        with zipfile.ZipFile(archive, "w") as package:
+            package.writestr("Vertical_B.mp4", b"first")
+            package.writestr("Vertical_A.mp4", b"second")
+            package.writestr("notes.txt", "not media")
+        report = ImportService(self.root, "Demo", prober=fake_probe).import_zip(archive)
+        self.assertEqual(report["mapping_strategy"], "zip_order")
+        self.assertTrue(report["mapping_requires_review"])
+        self.assertEqual([(row["scene_number"], row["source_filename"]) for row in report["scene_map"]],
+                         [(1, "Vertical_B.mp4"), (2, "Vertical_A.mp4")])
+        self.assertEqual(report["files_found"], 2)
+        self.assertEqual(report["valid_files"], 2)
+
+    def test_zip_without_video_fails_clearly(self):
+        archive = self.root / "empty-source.zip"
+        with zipfile.ZipFile(archive, "w") as package:
+            package.writestr("notes.txt", "no video")
+        with self.assertRaisesRegex(ValueError, "No supported video"):
+            ImportService(self.root, "Demo", prober=fake_probe).import_zip(archive)
+
+    def test_non_video_zip_member_still_gets_path_safety_check(self):
+        archive = self.root / "unsafe.zip"
+        with zipfile.ZipFile(archive, "w") as package:
+            package.writestr("../notes.txt", "unsafe")
+        with self.assertRaisesRegex(ValueError, "Unsafe ZIP member"):
+            ImportService(self.root, "Demo", prober=fake_probe).import_zip(archive)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -33,8 +33,10 @@ def find_ffprobe(repo_root: Path) -> Path:
     system = shutil.which("ffprobe")
     if system:
         return Path(system)
-    pattern = "remotion/node_modules/.pnpm/@remotion+compositor-*/node_modules/@remotion/compositor-*/ffprobe.exe"
-    candidates = sorted(repo_root.glob(pattern))
+    compositor_root = repo_root / "remotion" / "node_modules" / "@remotion"
+    candidates = sorted(compositor_root.glob("compositor-*/ffprobe.exe"))
+    if not candidates:
+        candidates = sorted(repo_root.glob("remotion/node_modules/.pnpm/@remotion+compositor-*/node_modules/@remotion/compositor-*/ffprobe.exe"))
     if not candidates:
         raise FileNotFoundError("ffprobe not found in PATH or the installed Remotion compositor.")
     return candidates[-1]
