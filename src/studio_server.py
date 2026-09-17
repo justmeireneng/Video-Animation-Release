@@ -264,6 +264,10 @@ class StudioApplication:
             raise StudioApiError("Enter preview text before generating voice.")
         if len(text) > 1_000:
             raise StudioApiError("Voice preview text must be 1,000 characters or fewer.")
+        preview_scope = str(request.get("preview_scope", "quick"))
+        if preview_scope not in {"quick", "full"}:
+            raise StudioApiError("Voice preview scope must be quick or full.")
+        synthesis_text = self._quick_preview_text(text) if preview_scope == "quick" else text
         manifest = self.update_voice(project_id, request)
         config = VoiceConfig.from_project(manifest)
         # A manual preview favors responsiveness. Full narration keeps the
@@ -271,7 +275,7 @@ class StudioApplication:
         config.options = {**config.options, "num_step": 4}
         service = VoiceService(self._project_root(project_id), fallback=False)
         try:
-            result = service.generate_voice_preview(config, text)
+            result = service.generate_voice_preview(config, synthesis_text)
         except (RuntimeError, KeyError) as exc:
             raise StudioApiError(str(exc), HTTPStatus.CONFLICT) from exc
         preview = Path(result.audio_file).resolve()
@@ -288,7 +292,23 @@ class StudioApplication:
         return {
             **result.to_dict(), "preview_id": preview_id,
             "audio_url": f"/api/projects/{project_id}/voice/preview", "metrics": service.last_metrics,
+            "preview_scope": preview_scope, "preview_text": synthesis_text,
         }
+
+    @staticmethod
+    def _quick_preview_text(text: str, limit: int = 48) -> str:
+        if len(text) <= limit:
+            return text
+        candidate = text[:limit]
+        punctuation = max(candidate.rfind(mark) for mark in ",;:.!?")
+        if punctuation >= 16:
+            return candidate[:punctuation + 1].strip()
+        clipped = candidate.rsplit(" ", 1)[0].strip()
+        if not clipped:
+            clipped = candidate.strip()
+        if clipped and clipped[-1] not in ".!?" and len(clipped) < limit:
+            return f"{clipped}."
+        return clipped
 
     def voice_preview_path(self, project_id: str) -> Path:
         root = self._project_root(project_id)

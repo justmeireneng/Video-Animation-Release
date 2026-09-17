@@ -5,8 +5,10 @@ from __future__ import annotations
 import ctypes
 import json
 import os
+import queue
 import subprocess
 import tempfile
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -43,6 +45,10 @@ def _memory_headroom() -> dict[str, int] | None:
 class OmniVoiceProvider(VoiceProvider):
     provider_id = "omnivoice"
     display_name = "OmniVoice"
+    _warm_worker: subprocess.Popen[str] | None = None
+    _warm_worker_key: tuple[str, ...] | None = None
+    _warm_worker_timer: threading.Timer | None = None
+    _warm_worker_lock = threading.Lock()
 
     def __init__(self, model_id: str = "k2-fsa/OmniVoice", device: str = "cpu",
                  runtime_python: Path | str | None = None, model_path: Path | str | None = None,
@@ -89,7 +95,7 @@ class OmniVoiceProvider(VoiceProvider):
         if headroom["physical"] < COMFORTABLE_MEMORY_BYTES:
             return (
                 "ready_low_memory",
-                "Low-memory mode is available: OmniVoice will use the Windows pagefile, so a short CPU preview can take 2–4 minutes.",
+                "Low-memory mode is available. The first CPU preview loads the model; following previews reuse it for 10 minutes and are faster.",
                 values,
             )
         return "ready", None, values
@@ -108,7 +114,7 @@ class OmniVoiceProvider(VoiceProvider):
             "status": memory_status if ready else "memory_exhausted" if available else "not_installed",
             "provider": self.provider_id, "model_id": self.model_id, "model_path": str(self.model_path),
             "device": self.device, "runtime_backend": "omnivoice_local", "detail": resource_error or memory_detail,
-            "memory": memory,
+            "memory": memory, "warm_worker": self._worker_is_alive(),
         }
 
     def capabilities(self) -> dict[str, Any]:
@@ -132,6 +138,115 @@ class OmniVoiceProvider(VoiceProvider):
         values = [design.get("gender"), age, f"{design.get('pitch')} pitch" if design.get("pitch") else None]
         return ", ".join(str(value) for value in values if value)
 
+    @classmethod
+    def _worker_is_alive(cls) -> bool:
+        return cls._warm_worker is not None and cls._warm_worker.poll() is None
+
+    @classmethod
+    def _stop_worker_locked(cls) -> None:
+        if cls._warm_worker_timer is not None:
+            cls._warm_worker_timer.cancel()
+            cls._warm_worker_timer = None
+        worker = cls._warm_worker
+        cls._warm_worker = None
+        cls._warm_worker_key = None
+        if worker is not None:
+            if worker.poll() is None:
+                worker.terminate()
+                try:
+                    worker.wait(timeout=5)
+                except subprocess.TimeoutExpired:
+                    worker.kill()
+                    worker.wait(timeout=5)
+            for stream in (worker.stdin, worker.stdout):
+                if stream is not None and not stream.closed:
+                    try:
+                        stream.close()
+                    except OSError:
+                        pass
+
+    @classmethod
+    def shutdown_warm_worker(cls) -> None:
+        with cls._warm_worker_lock:
+            cls._stop_worker_locked()
+
+    @classmethod
+    def _schedule_worker_shutdown(cls) -> None:
+        if cls._warm_worker_timer is not None:
+            cls._warm_worker_timer.cancel()
+        ttl = max(60, int(os.environ.get("OMNIVOICE_WARM_TTL_SECONDS", "600")))
+        timer = threading.Timer(ttl, cls.shutdown_warm_worker)
+        timer.daemon = True
+        cls._warm_worker_timer = timer
+        timer.start()
+
+    def _worker_request(self, payload: dict[str, Any]) -> dict[str, Any]:
+        cls = type(self)
+        worker_key = (str(self.runtime_python.resolve()), str(self.runner_path.resolve()),
+                      str(self.model_path.resolve()), self.device)
+        with cls._warm_worker_lock:
+            if not cls._worker_is_alive() or cls._warm_worker_key != worker_key:
+                cls._stop_worker_locked()
+                environment = {**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
+                cls._warm_worker = subprocess.Popen(
+                    [str(self.runtime_python), str(self.runner_path), "--serve"], cwd=self.repo_root,
+                    env=environment, stdin=subprocess.PIPE, stdout=subprocess.PIPE,
+                    stderr=subprocess.DEVNULL, text=True, encoding="utf-8", bufsize=1,
+                )
+                cls._warm_worker_key = worker_key
+            worker = cls._warm_worker
+            if worker is None or worker.stdin is None or worker.stdout is None:
+                raise RuntimeError("OmniVoice warm worker could not start.")
+            try:
+                worker.stdin.write(json.dumps(payload, ensure_ascii=False) + "\n")
+                worker.stdin.flush()
+            except (BrokenPipeError, OSError) as exc:
+                cls._stop_worker_locked()
+                raise RuntimeError("OmniVoice warm worker stopped unexpectedly.") from exc
+
+            response_queue: queue.Queue[str] = queue.Queue(maxsize=1)
+            reader = threading.Thread(target=lambda: response_queue.put(worker.stdout.readline()), daemon=True)
+            reader.start()
+            try:
+                response_line = response_queue.get(timeout=20 * 60)
+            except queue.Empty as exc:
+                cls._stop_worker_locked()
+                raise RuntimeError("OmniVoice preview timed out after 20 minutes on CPU.") from exc
+            if not response_line:
+                cls._stop_worker_locked()
+                raise RuntimeError("OmniVoice warm worker exited before returning audio.")
+            try:
+                response = json.loads(response_line)
+            except json.JSONDecodeError as exc:
+                cls._stop_worker_locked()
+                raise RuntimeError("OmniVoice warm worker returned an invalid response.") from exc
+            if not response.get("ok"):
+                raise RuntimeError(f"OmniVoice preview failed: {response.get('error', 'Unknown worker error')}")
+            cls._schedule_worker_shutdown()
+            return dict(response.get("metrics") or {})
+
+    def _cold_request(self, payload: dict[str, Any], output: Path) -> dict[str, Any]:
+        with tempfile.NamedTemporaryFile("w", suffix=".json", encoding="utf-8", delete=False, dir=output.parent) as handle:
+            json.dump(payload, handle, ensure_ascii=False)
+            request_file = Path(handle.name)
+        environment = {**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
+        try:
+            completed = subprocess.run(
+                [str(self.runtime_python), str(self.runner_path), str(request_file)], cwd=self.repo_root,
+                env=environment, capture_output=True, text=True, encoding="utf-8", timeout=20 * 60,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise RuntimeError("OmniVoice preview timed out after 20 minutes on CPU.") from exc
+        finally:
+            request_file.unlink(missing_ok=True)
+        if completed.returncode != 0:
+            detail = (completed.stderr or completed.stdout or "Unknown OmniVoice runtime error").strip().splitlines()[-1]
+            raise RuntimeError(f"OmniVoice preview failed: {detail}")
+        try:
+            return json.loads(completed.stdout.strip().splitlines()[-1])
+        except (json.JSONDecodeError, IndexError):
+            return {"backend": "omnivoice_local", "warm_model": False}
+
     def generate_voice(self, request: VoiceGenerationRequest) -> Path:
         if not self.is_available():
             raise RuntimeError("Local OmniVoice runtime or model files are missing.")
@@ -146,28 +261,18 @@ class OmniVoiceProvider(VoiceProvider):
             "instruct": self._instruction(request.options), "device": self.device,
             "num_step": max(4, min(32, int(request.options.get("num_step", 16)))),
         }
-        with tempfile.NamedTemporaryFile("w", suffix=".json", encoding="utf-8", delete=False, dir=output.parent) as handle:
-            json.dump(payload, handle, ensure_ascii=False)
-            request_file = Path(handle.name)
-        environment = {**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
         try:
-            completed = subprocess.run(
-                [str(self.runtime_python), str(self.runner_path), str(request_file)], cwd=self.repo_root,
-                env=environment, capture_output=True, text=True, encoding="utf-8", timeout=20 * 60,
+            self.last_metrics = (
+                self._cold_request(payload, output)
+                if os.environ.get("OMNIVOICE_DISABLE_WARM_WORKER") == "1"
+                else self._worker_request(payload)
             )
-        except subprocess.TimeoutExpired as exc:
+        except RuntimeError:
             output.unlink(missing_ok=True)
-            raise RuntimeError("OmniVoice preview timed out after 20 minutes on CPU.") from exc
-        finally:
-            request_file.unlink(missing_ok=True)
-        if completed.returncode != 0 or not output.is_file():
+            raise
+        if not output.is_file():
             output.unlink(missing_ok=True)
-            detail = (completed.stderr or completed.stdout or "Unknown OmniVoice runtime error").strip().splitlines()[-1]
-            raise RuntimeError(f"OmniVoice preview failed: {detail}")
-        try:
-            self.last_metrics = json.loads(completed.stdout.strip().splitlines()[-1])
-        except (json.JSONDecodeError, IndexError):
-            self.last_metrics = {"backend": "omnivoice_local"}
+            raise RuntimeError("OmniVoice worker completed without creating an audio file.")
         return output
 
     def synthesize(self, request: VoiceGenerationRequest) -> VoiceSynthesisResult:

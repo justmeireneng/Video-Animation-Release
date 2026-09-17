@@ -167,6 +167,7 @@ class TestStudioProject(unittest.TestCase):
 
         def generate(service, config, sample_text, output_path=None):
             self.assertEqual(config.options["num_step"], 4)
+            self.assertLessEqual(len(sample_text), 48)
             output = service.preview_root / "omnivoice-test.wav"
             output.write_bytes(b"RIFF-local-preview")
             return VoiceSynthesisResult(output, "omnivoice", "default", config.language, 1.25, 24000)
@@ -177,11 +178,31 @@ class TestStudioProject(unittest.TestCase):
                 "gender": "male", "age": "young adult", "pitch": "moderate", "speed": 1.10,
             })
         self.assertEqual(response["provider"], "omnivoice")
+        self.assertEqual(response["preview_scope"], "quick")
         self.assertEqual(response["audio_url"], f"/api/projects/{self.project_id}/voice/preview")
         self.assertTrue(app.voice_preview_path(self.project_id).is_file())
         approved = app.approve_voice(self.project_id)
         self.assertTrue(approved["voice"]["approved"])
         self.assertEqual(approved["status"], "READY_TO_RENDER")
+
+    def test_quick_preview_clips_long_text_but_full_preview_keeps_it(self):
+        app = StudioApplication(self.root)
+        text = "Hàn Quốc là nơi những cung điện cổ, khu phố truyền thống và lịch sử lâu đời cùng tồn tại."
+        heard = []
+
+        def generate(service, config, sample_text, output_path=None):
+            heard.append(sample_text)
+            output = service.preview_root / f"preview-{len(heard)}.wav"
+            output.write_bytes(b"RIFF-local-preview")
+            return VoiceSynthesisResult(output, "omnivoice", "default", config.language, 1.25, 24000)
+
+        with patch("src.studio_server.VoiceService.generate_voice_preview", autospec=True, side_effect=generate):
+            quick = app.generate_voice_preview(self.project_id, {"text": text, "preview_scope": "quick"})
+            full = app.generate_voice_preview(self.project_id, {"text": text, "preview_scope": "full"})
+        self.assertLessEqual(len(quick["preview_text"]), 48)
+        self.assertEqual(quick["preview_text"], heard[0])
+        self.assertEqual(full["preview_text"], text)
+        self.assertEqual(heard[1], text)
 
 
 if __name__ == "__main__":

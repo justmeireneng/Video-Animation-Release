@@ -64,6 +64,16 @@ The desktop preview endpoint uses 4 diffusion steps to stay responsive on the
 8 GB target machine. Full scene narration retains the 16-step provider default;
 the two qualities use separate cache entries.
 
+`Quick Preview` synthesizes only the first natural phrase (up to 48 characters)
+for voice audition. `Full sentence` remains available when exact pacing across
+the entire sample matters.
+
+The local runtime is lazy and warm. The first request starts an isolated worker
+and loads the model; subsequent previews reuse the same loaded model. The worker
+automatically exits after 10 idle minutes so browser-heavy work can reclaim the
+RAM/pagefile allocation. Set `OMNIVOICE_WARM_TTL_SECONDS` to change this window,
+or `OMNIVOICE_DISABLE_WARM_WORKER=1` for one-shot diagnostics.
+
 ## VoiceStudio status
 
 VoiceStudio is **disabled and outside the current scope** because its local resource footprint is too heavy for the target hardware.

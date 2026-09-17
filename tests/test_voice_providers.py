@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import io
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -83,10 +84,40 @@ class TestVoiceProviders(unittest.TestCase):
                 text="Xin chào", output_path=output,
                 options={"mode": "voice_design", "speed": 1.12, "design": {"gender": "male", "age": "young adult", "pitch": "moderate"}},
             )
-            with patch("src.providers.voice.omnivoice._memory_headroom", return_value={"physical": 4 * 1024**3, "commit": 6 * 1024**3}), patch("subprocess.run", side_effect=run):
+            with patch.dict(os.environ, {"OMNIVOICE_DISABLE_WARM_WORKER": "1"}), patch("src.providers.voice.omnivoice._memory_headroom", return_value={"physical": 4 * 1024**3, "commit": 6 * 1024**3}), patch("subprocess.run", side_effect=run):
                 result = provider.generate_voice(request)
             self.assertEqual(result, output.resolve())
             self.assertEqual(provider.last_metrics["backend"], "omnivoice_local")
+
+    def test_omnivoice_warm_worker_reuses_loaded_model(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runner, model = root / "runner.py", root / "model"
+            runner.write_text(
+                "import json,sys,wave\n"
+                "warm=False\n"
+                "for line in sys.stdin:\n"
+                " r=json.loads(line)\n"
+                " with wave.open(r['output_path'],'wb') as a:\n"
+                "  a.setnchannels(1);a.setsampwidth(2);a.setframerate(16000);a.writeframes(b'\\0\\0'*800)\n"
+                " print(json.dumps({'ok':True,'metrics':{'backend':'omnivoice_local','warm_model':warm}}),flush=True)\n"
+                " warm=True\n",
+                encoding="utf-8",
+            )
+            (model / "audio_tokenizer").mkdir(parents=True)
+            (model / "model.safetensors").write_bytes(b"model")
+            (model / "audio_tokenizer" / "model.safetensors").write_bytes(b"tokenizer")
+            provider = OmniVoiceProvider(runtime_python=sys.executable, runner_path=runner, model_path=model)
+            request = VoiceGenerationRequest(text="Một", output_path=root / "one.wav", options={"mode": "auto"})
+            try:
+                with patch("src.providers.voice.omnivoice._memory_headroom", return_value={"physical": 4 * 1024**3, "commit": 6 * 1024**3}):
+                    provider.generate_voice(request)
+                    self.assertFalse(provider.last_metrics["warm_model"])
+                    request.output_path = root / "two.wav"
+                    provider.generate_voice(request)
+                    self.assertTrue(provider.last_metrics["warm_model"])
+            finally:
+                OmniVoiceProvider.shutdown_warm_worker()
 
     def test_omnivoice_health_allows_pagefile_backed_low_memory_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -103,7 +134,7 @@ class TestVoiceProviders(unittest.TestCase):
             self.assertTrue(health["available"])
             self.assertTrue(health["ready_for_generation"])
             self.assertEqual(health["status"], "ready_low_memory")
-            self.assertIn("pagefile", health["detail"])
+            self.assertIn("reuse", health["detail"])
             self.assertEqual(health["memory"]["free_physical_gb"], 0.5)
 
     def test_omnivoice_health_blocks_only_when_commit_headroom_is_exhausted(self):
