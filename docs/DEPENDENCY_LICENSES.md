@@ -12,7 +12,7 @@ installer until its terms and provenance have been recorded for that build.
 | Gate | Status | Why |
 | --- | --- | --- |
 | Paid cloud API required for core workflow | Pass | The project does not call Flow/Veo, OpenAI, ElevenLabs, or a cloud render API. |
-| Fully offline narration with the current runtime | Blocked | The current `OmniVoiceProvider` delegates to `edge-tts`, which contacts Microsoft's online speech service. |
+| Fully offline narration with the current runtime | Pass for local development | `OmniVoiceProvider` invokes the installed k2-fsa model in an isolated offline process and has no cloud fallback. |
 | Bundle official OmniVoice weights | Blocked | The upstream model card licenses the pre-trained weights as CC-BY-NC; this is unsuitable for a commercial/distributable model pack without separate permission. |
 | Use Remotion without a paid license | Conditional | The Remotion free license covers individuals, non-profits, and for-profit organizations with up to three employees. Larger for-profit organizations need a Company License. |
 | Bundle the current FFmpeg binary | Review required | The binary currently comes from Remotion's compositor package. Its exact configure flags, codec patents, and redistribution notices must be audited before shipping it. |
@@ -22,8 +22,7 @@ installer until its terms and provenance have been recorded for that build.
 | Name | Version / source | Purpose | License | Commercial use allowed? | Redistribution allowed? | Attribution / notice | Status and notes |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | Python | 3.12.14 local venv | Local orchestrator | PSF License | Yes | Yes | Preserve license notice | Pass. |
-| `edge-tts` | 7.2.8 | Current speech transport behind `OmniVoiceProvider` | MIT (upstream project; verify in locked source archive) | Code: yes | Code: yes | Include MIT notice if bundled | **Not offline.** It is retained only as the current development fallback, not evidence of an offline voice engine. |
-| OmniVoice source code | `k2-fsa/OmniVoice` | Future local voice provider implementation | Apache-2.0 | Yes | Yes | Apache notice / NOTICE where applicable | Do not install or bundle until a compatible model plan is approved. [Source](https://github.com/k2-fsa/OmniVoice/blob/master/LICENSE) |
+| OmniVoice source code | `k2-fsa/OmniVoice` | Active local voice provider implementation | Apache-2.0 | Yes | Yes | Apache notice / NOTICE where applicable | Installed separately for local use and excluded from the application bundle. [Source](https://github.com/k2-fsa/OmniVoice/blob/master/LICENSE) |
 | OmniVoice pretrained weights | `k2-fsa/OmniVoice` | Local synthesis model | CC-BY-NC | **No commercial use** | Subject to CC-BY-NC | Attribution + non-commercial conditions | **Blocked for commercial/distributable model pack.** Upstream model card explicitly distinguishes its Apache-2.0 code from CC-BY-NC weights. [Model card](https://huggingface.co/k2-fsa/OmniVoice) |
 | Remotion | 4.0.523 | React video composition and local render CLI | Remotion License | Conditional | Conditional | Preserve Remotion license | Conditional: free only for individual, non-profit, or for-profit organization of up to 3 employees. [License](https://github.com/remotion-dev/remotion/blob/main/LICENSE.md) |
 | React | 19.2.3 | Remotion UI runtime | MIT | Yes | Yes | MIT notice | Audit from the lockfile before packaging. |
@@ -43,8 +42,8 @@ development.
 ## Packaging policy until these gates are cleared
 
 1. Never download, install, start, or bundle VoiceStudio.
-2. Never download or bundle official OmniVoice weights automatically.
-3. Do not claim the speech engine is offline while it uses `edge-tts`.
+2. Never download or bundle official OmniVoice weights automatically; use only a separately installed local model.
+3. Do not add a cloud speech fallback to the production provider registry.
 4. Do not ship the current Remotion or FFmpeg runtime in a commercial
    installer without confirming the intended organization meets the relevant
    license terms and that the FFmpeg binary has a documented compliant build.

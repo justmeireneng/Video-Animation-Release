@@ -54,11 +54,11 @@ send projects or source media to a cloud service.
 ## Voice status
 
 The only active provider identity is `omnivoice`; VoiceStudio is not installed,
-loaded, health-checked, called, or bundled. The current adapter's development
-transport is Edge TTS, which is online. Therefore the loopback UI deliberately
-does not present a cloud-backed preview as an offline OmniVoice result. A
-commercial/offline OmniVoice model bundle is blocked pending a compatible model
-license. See `docs/VOICE_PROVIDERS.md` and `docs/DEPENDENCY_LICENSES.md`.
+loaded, health-checked, called, or bundled. Voice preview uses the real local
+OmniVoice model in `.venv-omnivoice` with offline model loading. It does not use
+Edge TTS or another cloud fallback. The model's CC-BY-NC terms fit this personal,
+non-commercial phase; reassess before any commercial distribution. See
+`docs/VOICE_PROVIDERS.md` and `docs/DEPENDENCY_LICENSES.md`.
 
 ## Packaging status
 

@@ -3,7 +3,9 @@ import tempfile
 import unittest
 from urllib.request import Request, urlopen
 from pathlib import Path
+from unittest.mock import patch
 
+from src.providers.base import VoiceSynthesisResult
 from src.services.import_service import ImportService
 from src.services.script_service import ScriptService
 from src.services.studio_project import LocalProjectManager
@@ -153,10 +155,32 @@ class TestStudioProject(unittest.TestCase):
             "mode": "voice_design", "language": "vi", "gender": "female", "pitch": "high", "speed": 1.12,
         })
         self.assertEqual(updated["voice"]["provider"], "omnivoice")
-        self.assertEqual(updated["voice"]["design"], {"gender": "female", "pitch": "high"})
+        self.assertEqual(updated["voice"]["design"], {"gender": "female", "age": "young adult", "pitch": "high"})
         self.assertFalse(updated["voice"]["approved"])
         with self.assertRaisesRegex(Exception, "does not support mode"):
             StudioApplication(self.root).update_voice(self.project_id, {"mode": "voice_clone"})
+
+    def test_voice_preview_is_persisted_and_required_before_approval(self):
+        app = StudioApplication(self.root)
+        with self.assertRaisesRegex(Exception, "Generate a voice preview"):
+            app.approve_voice(self.project_id)
+
+        def generate(service, config, sample_text, output_path=None):
+            output = service.preview_root / "omnivoice-test.wav"
+            output.write_bytes(b"RIFF-local-preview")
+            return VoiceSynthesisResult(output, "omnivoice", "default", config.language, 1.25, 24000)
+
+        with patch("src.studio_server.VoiceService.generate_voice_preview", autospec=True, side_effect=generate):
+            response = app.generate_voice_preview(self.project_id, {
+                "text": "Đây là bản đọc thử.", "mode": "voice_design", "language": "vi",
+                "gender": "male", "age": "young adult", "pitch": "moderate", "speed": 1.10,
+            })
+        self.assertEqual(response["provider"], "omnivoice")
+        self.assertEqual(response["audio_url"], f"/api/projects/{self.project_id}/voice/preview")
+        self.assertTrue(app.voice_preview_path(self.project_id).is_file())
+        approved = app.approve_voice(self.project_id)
+        self.assertTrue(approved["voice"]["approved"])
+        self.assertEqual(approved["status"], "READY_TO_RENDER")
 
 
 if __name__ == "__main__":

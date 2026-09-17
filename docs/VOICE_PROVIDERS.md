@@ -11,23 +11,26 @@ VoiceProvider
 
 `VoiceProvider` remains the provider-neutral contract for a future extension, but the production registry, CLI, and Voice Control panel activate only `omnivoice`.
 
-The current OmniVoice adapter uses the existing Vietnamese Edge TTS runtime. It does not download OmniVoice model weights during startup or preview generation.
+The current adapter runs the real `k2-fsa/OmniVoice` model in an isolated local
+Python process. The model is loaded only when generating audio; app startup and
+health checks never load weights or download files. Inference is forced offline
+and no Edge TTS/cloud fallback is used.
 
 ## Current OmniVoice capabilities
 
 | Capability | Status |
 | --- | --- |
 | Auto mode | Available |
-| Voice Design | Available, using Vietnamese male/female presets |
+| Voice Design | Available through native `instruct` attributes |
 | Voice Clone | Not implemented; hidden |
 | Gender | Male / Female |
-| Age | Not implemented; hidden |
+| Age | Young adult / middle-aged / older adult |
 | Pitch | Low / Moderate / High |
 | Speed | 0.85x–1.20x |
 | Reference audio | Not implemented; hidden |
 | Preview before video render | Available |
 
-The speed control uses Edge TTS rate independently from pitch. The presets are 0.95 Slow, 1.00 Normal, 1.08 Natural+, 1.10 Default, 1.12 Fast, and 1.15 Fast+.
+The speed control is passed to OmniVoice's native `speed` input and does not alter the pitch setting. The presets are 0.95 Slow, 1.00 Normal, 1.08 Natural+, 1.10 Default, 1.12 Fast, and 1.15 Fast+.
 
 The active default is:
 
@@ -39,6 +42,7 @@ The active default is:
     "language": "vi",
     "design": {
       "gender": "male",
+      "age": "young adult",
       "pitch": "moderate"
     },
     "speed": 1.10
@@ -46,7 +50,9 @@ The active default is:
 }
 ```
 
-`age` is deliberately absent from the active configuration because the current adapter cannot apply it. This keeps the configuration, cache key, and UI truthful to the runtime.
+On the current CPU-only target, the app requires about 3 GB of free RAM before
+starting a preview worker. If less memory is available it reports the measured
+shortage instead of risking an application or system crash.
 
 ## Preview and cache
 

@@ -22,6 +22,7 @@ from src.providers.voice.registry import ProviderRegistry
 from src.services.import_service import ImportService
 from src.services.script_service import ScriptService
 from src.services.studio_project import LocalProjectManager
+from src.services.voice_service import VoiceConfig, VoiceService
 from src.video.scene_source_manager import SceneVideoStore
 
 
@@ -240,19 +241,71 @@ class StudioApplication:
         if mode == "voice_design":
             gender = str(request.get("gender", design.get("gender", "male")))
             pitch = str(request.get("pitch", design.get("pitch", "moderate")))
+            age = str(request.get("age", design.get("age", "young adult")))
             if gender not in {"male", "female"} or not capabilities.get("gender"):
                 raise StudioApiError("The active provider cannot apply that gender setting.")
             if pitch not in {"low", "moderate", "high"} or not capabilities.get("pitch"):
                 raise StudioApiError("The active provider cannot apply that pitch setting.")
-            design = {"gender": gender, "pitch": pitch}
+            if age not in {"young adult", "middle-aged", "older adult"} or not capabilities.get("age"):
+                raise StudioApiError("The active provider cannot apply that age setting.")
+            design = {"gender": gender, "age": age, "pitch": pitch}
         else:
             design = {}
         manifest["voice"] = {
             **dict(manifest.get("voice") or {}), "provider": "omnivoice", "mode": mode,
             "language": str(request.get("language", "vi")), "design": design,
-            "speed": round(speed, 2), "approved": False,
+            "speed": round(speed, 2), "approved": False, "selected_preview": None, "preview_file": None,
         }
         return self.manager.save(identifier, manifest)
+
+    def generate_voice_preview(self, project_id: str, request: dict[str, Any]) -> dict[str, Any]:
+        text = str(request.get("text", "")).strip()
+        if not text:
+            raise StudioApiError("Enter preview text before generating voice.")
+        if len(text) > 1_000:
+            raise StudioApiError("Voice preview text must be 1,000 characters or fewer.")
+        manifest = self.update_voice(project_id, request)
+        config = VoiceConfig.from_project(manifest)
+        service = VoiceService(self._project_root(project_id), fallback=False)
+        try:
+            result = service.generate_voice_preview(config, text)
+        except (RuntimeError, KeyError) as exc:
+            raise StudioApiError(str(exc), HTTPStatus.CONFLICT) from exc
+        preview = Path(result.audio_file).resolve()
+        root = self._project_root(project_id)
+        if not preview.is_relative_to(root):
+            raise StudioApiError("Generated preview path escaped the project.", HTTPStatus.INTERNAL_SERVER_ERROR)
+        manifest = self.manager.load(project_id)
+        preview_id = preview.stem
+        manifest["voice"] = {
+            **dict(manifest.get("voice") or {}), "preview_file": preview.relative_to(root).as_posix(),
+            "selected_preview": preview_id, "approved": False,
+        }
+        self.manager.save(project_id, manifest)
+        return {
+            **result.to_dict(), "preview_id": preview_id,
+            "audio_url": f"/api/projects/{project_id}/voice/preview", "metrics": service.last_metrics,
+        }
+
+    def voice_preview_path(self, project_id: str) -> Path:
+        root = self._project_root(project_id)
+        manifest = self.manager.load(project_id)
+        relative = (manifest.get("voice") or {}).get("preview_file")
+        path = (root / relative).resolve() if relative else None
+        if not path or not path.is_relative_to(root) or not path.is_file():
+            raise StudioApiError("Generate a voice preview first.", HTTPStatus.NOT_FOUND)
+        return path
+
+    def approve_voice(self, project_id: str) -> dict[str, Any]:
+        self.voice_preview_path(project_id)
+        manifest = self.manager.load(project_id)
+        voice = dict(manifest.get("voice") or {})
+        if not voice.get("selected_preview"):
+            raise StudioApiError("Generate and listen to a preview before approving voice.", HTTPStatus.CONFLICT)
+        voice["approved"] = True
+        manifest["voice"] = voice
+        manifest["status"] = "READY_TO_RENDER"
+        return self.manager.save(project_id, manifest)
 
     def edit_video(self, project_id: str, scene_id: str, request: dict[str, Any]) -> dict[str, Any]:
         """Apply one non-destructive edit to an imported source version."""
@@ -360,6 +413,9 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
             if parts == ["api", "projects"]:
                 self._json(HTTPStatus.OK, {"projects": self.app.list_projects()})
                 return
+            if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3:] == ["voice", "preview"]:
+                self._video(self.app.voice_preview_path(parts[2]))
+                return
             if len(parts) == 6 and parts[:2] == ["api", "projects"] and parts[3] == "scenes" and parts[5] == "source":
                 self._video(self.app.source_video_path(parts[2], parts[4]))
                 return
@@ -413,6 +469,12 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
                 return
             if len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] == "voice":
                 self._json(HTTPStatus.OK, self.app.update_voice(parts[2], self._body_json()))
+                return
+            if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3:] == ["voice", "preview"]:
+                self._json(HTTPStatus.OK, self.app.generate_voice_preview(parts[2], self._body_json()))
+                return
+            if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3:] == ["voice", "approve"]:
+                self._json(HTTPStatus.OK, self.app.approve_voice(parts[2]))
                 return
             if len(parts) == 6 and parts[:2] == ["api", "projects"] and parts[3] == "scenes" and parts[5] == "video":
                 body = self._body_json()

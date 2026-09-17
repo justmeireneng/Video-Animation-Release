@@ -336,6 +336,10 @@ class VoiceControlService:
         if preview is None:
             raise VoiceControlError(f"Unknown voice preview: {preview_id}")
         config = VoiceConfig.from_project({"voice": preview["config"]})
+        # Preserve exactly the controls used for this take. Defaults added by
+        # newer provider versions must not retroactively invalidate an older
+        # preview made by a provider without that control.
+        config.design = dict(preview["config"].get("design") or {})
         config.selected_preview = preview_id
         config.approval_required = True
         config.approved = False
@@ -356,6 +360,8 @@ class VoiceControlService:
     def approve_voice(self) -> dict[str, Any]:
         project = self._project_data()
         config = VoiceConfig.from_project(project)
+        if isinstance(project.get("voice"), dict) and isinstance(project["voice"].get("design"), dict):
+            config.design = dict(project["voice"]["design"])
         if not config.selected_preview:
             raise VoiceControlError("Select a preview before approving voice narration.")
         self.validate(config)

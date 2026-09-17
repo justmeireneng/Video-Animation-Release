@@ -162,7 +162,7 @@ class TestVoiceControl(unittest.TestCase):
             return output
 
         with tempfile.TemporaryDirectory() as tmp, patch(
-            "src.providers.voice.edge_tts.EdgeTTSVoiceProvider.generate_voice", autospec=True, side_effect=generate
+            "src.providers.voice.omnivoice.OmniVoiceProvider.generate_voice", autospec=True, side_effect=generate
         ):
             root = Path(tmp)
             service = VoiceService(root, fallback=False)
@@ -175,9 +175,9 @@ class TestVoiceControl(unittest.TestCase):
                     ),
                     root / f"female_{speed:.2f}.wav",
                 )
-        self.assertEqual([item.rate for item in captured], ["+8%", "+12%"])
+        self.assertEqual([item.options["speed"] for item in captured], [1.08, 1.12])
         self.assertEqual([item.pitch for item in captured], ["+0Hz", "+0Hz"])
-        self.assertEqual({item.voice_id for item in captured}, {"vi-VN-HoaiMyNeural"})
+        self.assertEqual({item.voice_id for item in captured}, {"default"})
 
     def test_shorter_narration_retimes_projection_by_trimming_not_speeding_visual(self):
         item = {

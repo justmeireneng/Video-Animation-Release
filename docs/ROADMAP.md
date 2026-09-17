@@ -29,7 +29,7 @@
 - [x] Thi?t l?p Global Visual Bible & H? th?ng tham chi?u 3 tr? c?t (Character, Studio, Style).
 - [x] T?o b? ?nh master keyframe ch?n th?c 9:16 ??ng nh?t 100%.
 - [x] Engine chuy?n ??ng 2.5D Parallax t?i ?u tr?n CPU k?t h?p Volumetric Light Sweeps.
-- [x] T?ch h?p thuy?t minh ti?ng Vi?t chu?n x?c (OmniVoice / EdgeTTS).
+- [x] Local Vietnamese narration through OmniVoice only; no active cloud fallback.
 - [x] Ph? ?? ??ng ASS chu?n TikTok Safe Area ($Y \approx 1450\text{px}$).
 - [x] Thi?t k? ?m thanh h?nh ??ng (SFX) k?t h?p Dynamic Ducking nh?c n?n (-14dB).
 - [x] ??ng g?i ho?n ch?nh d? ?n m?u `Astra_AI_Explainer` (70.78s, 14.3 MB).

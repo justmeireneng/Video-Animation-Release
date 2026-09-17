@@ -15,7 +15,7 @@
 ---
 
 ## 2. H??ng D?n T?i & C?i ??t OmniVoice (T?y Ch?n)
-N?u mu?n ch?y OmniVoice tr?n m?y c?c b? thay v? EdgeTTS:
+OmniVoice is the only active voice provider. Its runtime and model are installed separately from the app; the app never downloads weights at startup and never falls back to an online voice service.
 
 ```bash
 # C?i ??t git-lfs

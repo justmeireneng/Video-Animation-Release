@@ -18,7 +18,7 @@ and SFX. It never generates the scene artwork.
 
 The repository deliberately keeps both runtimes:
 
-- Python: story, storyboard, image-provider adapters, OmniVoice/EdgeTTS, review, SFX, orchestration.
+- Python: story, storyboard, image-provider adapters, local OmniVoice, review, SFX, orchestration.
 - Node/Remotion: animation, layout, mascot, subtitle presentation, timeline, MP4 render.
 
 The existing FFmpeg and cinematic renderer code remains intact for mastering and fallback.
@@ -107,7 +107,7 @@ Image Generation (8 Master Keyframes 9:16)
   ?
 Human Review (Storyboard Contact Sheet 8 Shots)
   ?
-Voice Generation (OmniVoice / EdgeTTS)
+Voice Generation (local OmniVoice only)
   ?
 Subtitle Engine (TikTok Safe Area Y ? 1450)
   ?

@@ -7,6 +7,7 @@ import sys
 import tempfile
 import unittest
 import wave
+import subprocess
 from pathlib import Path
 from unittest.mock import patch
 
@@ -60,12 +61,49 @@ class FakeProvider(VoiceProvider):
 
 class TestVoiceProviders(unittest.TestCase):
 
-    def test_omnivoice_keeps_existing_edge_fallback(self):
-        request = VoiceGenerationRequest(text="Xin chào", output_path="expected.wav")
-        with patch("src.providers.voice.edge_tts.EdgeTTSVoiceProvider.generate_voice", return_value=Path("expected.wav")) as generate:
-            result = OmniVoiceProvider().generate_voice(request)
-        self.assertEqual(result, Path("expected.wav"))
-        generate.assert_called_once_with(request)
+    def test_omnivoice_uses_isolated_local_runtime_without_edge_fallback(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime, runner, model = root / "python.exe", root / "runner.py", root / "model"
+            runtime.write_bytes(b"")
+            runner.write_text("", encoding="utf-8")
+            (model / "audio_tokenizer").mkdir(parents=True)
+            (model / "model.safetensors").write_bytes(b"model")
+            (model / "audio_tokenizer" / "model.safetensors").write_bytes(b"tokenizer")
+            output = root / "preview.wav"
+
+            def run(command, **kwargs):
+                request_file = Path(command[-1])
+                payload = json.loads(request_file.read_text(encoding="utf-8"))
+                Path(payload["output_path"]).write_bytes(wav_bytes())
+                return subprocess.CompletedProcess(command, 0, '{"backend":"omnivoice_local"}\n', "")
+
+            provider = OmniVoiceProvider(runtime_python=runtime, runner_path=runner, model_path=model)
+            request = VoiceGenerationRequest(
+                text="Xin chào", output_path=output,
+                options={"mode": "voice_design", "speed": 1.12, "design": {"gender": "male", "age": "young adult", "pitch": "moderate"}},
+            )
+            with patch("src.providers.voice.omnivoice._available_memory", return_value=4 * 1024**3), patch("subprocess.run", side_effect=run):
+                result = provider.generate_voice(request)
+            self.assertEqual(result, output.resolve())
+            self.assertEqual(provider.last_metrics["backend"], "omnivoice_local")
+
+    def test_omnivoice_health_reports_low_memory_without_loading_model(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime, runner, model = root / "python.exe", root / "runner.py", root / "model"
+            runtime.write_bytes(b"")
+            runner.write_text("", encoding="utf-8")
+            (model / "audio_tokenizer").mkdir(parents=True)
+            (model / "model.safetensors").write_bytes(b"model")
+            (model / "audio_tokenizer" / "model.safetensors").write_bytes(b"tokenizer")
+            provider = OmniVoiceProvider(runtime_python=runtime, runner_path=runner, model_path=model)
+            with patch("src.providers.voice.omnivoice._available_memory", return_value=512 * 1024**2):
+                health = provider.health_check()
+            self.assertTrue(health["available"])
+            self.assertFalse(health["ready_for_generation"])
+            self.assertEqual(health["status"], "low_memory")
+            self.assertIn("0.5 GB is free", health["detail"])
 
     def test_default_registry_exposes_only_omnivoice(self):
         providers = ProviderRegistry().catalog()
@@ -75,7 +113,7 @@ class TestVoiceProviders(unittest.TestCase):
         default = VoiceConfig()
         self.assertEqual(default.provider, "omnivoice")
         self.assertEqual(default.mode, "voice_design")
-        self.assertEqual(default.design, {"gender": "male", "pitch": "moderate"})
+        self.assertEqual(default.design, {"gender": "male", "age": "young adult", "pitch": "moderate"})
         self.assertEqual(default.speed, 1.10)
         legacy = VoiceConfig.from_project({"voice": "vi-VN-NamMinhNeural", "language": "vi-VN", "rate": "-8%"})
         self.assertEqual(legacy.provider, "omnivoice")
@@ -152,7 +190,7 @@ class TestVoiceProviders(unittest.TestCase):
         config = VoiceConfig.from_project(source)
         self.assertEqual(config.provider, "omnivoice")
         self.assertEqual(config.mode, "voice_design")
-        self.assertEqual(config.design, {"gender": "male", "pitch": "moderate"})
+        self.assertEqual(config.design, {"gender": "male", "age": "young adult", "pitch": "moderate"})
         self.assertEqual(config.speed, 1.10)
         self.assertTrue((ROOT / "projects" / "Atlantic_Ocean_Explainer" / "remotion.json").is_file())
 

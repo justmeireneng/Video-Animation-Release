@@ -20,7 +20,7 @@ DEFAULT_PREVIEW_TEXT = (
 )
 
 DEFAULT_VOICE_MODE = "voice_design"
-DEFAULT_OMNIVOICE_DESIGN = {"gender": "male", "pitch": "moderate"}
+DEFAULT_OMNIVOICE_DESIGN = {"gender": "male", "age": "young adult", "pitch": "moderate"}
 
 
 def _speed_to_rate(speed: float) -> str:

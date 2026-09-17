@@ -28,7 +28,7 @@ const VOICE_CAPABILITIES = {
   supportedLanguages: ["vi"],
   modes: ["auto", "voice_design"],
   gender: true,
-  age: false,
+  age: true,
   pitch: true,
   styles: false,
   clone: false,
@@ -64,9 +64,10 @@ const state = {
   scriptState: { bulkText: "", mapped: 0, missing: 0, approved: false },
   voiceState: {
     provider: "omnivoice", language: "vi", locale: "default", mode: "voice_design", gender: "male", age: "young adult", pitch: "moderate", style: "documentary", speed: 1.1,
-    profileId: null, previewText: DEFAULT_NARRATION, previewStatus: "NOT GENERATED", playing: false, subtitleSync: "PENDING", advancedOpen: false,
+    profileId: null, previewText: DEFAULT_NARRATION, previewStatus: "NOT GENERATED", previewUrl: null, playing: false, subtitleSync: "PENDING", advancedOpen: false,
     profiles: [], history: [], comparisons: [], pronunciation: [],
   },
+  voiceRuntime: { available: false, ready_for_generation: false, status: "checking", detail: "Checking local OmniVoice runtime…" },
   subtitleState: { language: "same", font: "Be Vietnam Pro", weight: "SemiBold", size: 55, position: "Bottom", offset: 102, highlight: true, safeZone: true },
   audioState: { narration: 100, source: 30, bgm: 12, sfx: 35, master: 100 },
   workflowState: { scriptApproved: false, voiceApproved: false, previewReady: false },
@@ -133,7 +134,7 @@ function applyBackendProject(detail) {
     selectedId: detail.scenes?.[0]?.id || null, sceneCount: detail.scenes?.length || 0, timelineZoom: 1,
   };
   state.scriptState = { bulkText: detail.script_text || "", mapped: state.sceneState.items.filter(scene => scene.narration).length, missing: state.sceneState.items.filter(scene => !scene.narration).length, approved: Boolean(manifest.script?.approved) };
-  state.voiceState = { ...structuredClone(DEFAULT_VOICE_STATE), provider: voice.provider || "omnivoice", language: voice.language || "vi", locale: voice.locale || "default", mode: voice.mode || "voice_design", gender: voice.design?.gender || "male", age: voice.design?.age || "young adult", pitch: voice.design?.pitch || "moderate", speed: voice.speed || 1.1 };
+  state.voiceState = { ...structuredClone(DEFAULT_VOICE_STATE), provider: voice.provider || "omnivoice", language: voice.language || "vi", locale: voice.locale || "default", mode: voice.mode || "voice_design", gender: voice.design?.gender || "male", age: voice.design?.age || "young adult", pitch: voice.design?.pitch || "moderate", speed: voice.speed || 1.1, previewStatus: voice.preview_file ? "GENERATED" : "NOT GENERATED", previewUrl: voice.preview_file ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/voice/preview?t=${encodeURIComponent(manifest.updated_at || "")}` : null };
   state.workflowState = { scriptApproved: Boolean(manifest.script?.approved), voiceApproved: Boolean(voice.approved), previewReady: Boolean(manifest.render?.preview_ready) };
   state.reviewState = { finalized: Boolean(manifest.render?.final_ready), dirty: false, showCutsOnly: false };
   state.automationState = { status: summary.imported ? "SOURCE READY" : "IDLE", progress: summary.imported ? 100 : 0, step: summary.imported ? 1 : 0 };
@@ -151,7 +152,9 @@ async function loadBackendProject(projectId) {
 async function hydrateLocalWorkspace() {
   try {
     const payload = await apiRequest("/projects");
+    const health = await apiRequest("/health").catch(() => null);
     backendOnline = true;
+    state.voiceRuntime = health?.voice?.providers?.[0]?.health || state.voiceRuntime;
     state.workspaceState.projects = payload.projects.map(projectSummaryForUi);
     if (state.workspaceState.projects.length) await loadBackendProject(state.workspaceState.projects[0].id);
     else {
@@ -352,30 +355,33 @@ function capabilityHint(supported, label = "Future provider capability") { retur
 
 function renderVoice() {
   const voice = state.voiceState;
+  const runtime = state.voiceRuntime || {};
+  const runtimeLabel = runtime.ready_for_generation ? "● READY" : runtime.available ? "● RAM LOW" : "● NOT READY";
   const lang = language();
   const localeOptions = lang.locales.map(locale => ({ id: locale, label: locale === "default" ? "Default" : locale }));
   const profileOptions = voice.profiles.map(profile => ({ id: profile.id, label: profile.name }));
+  if (!profileOptions.length) profileOptions.push({ id: "native-design", label: "Native voice design" });
   const isLanguageReady = VOICE_CAPABILITIES.supportedLanguages.includes(voice.language);
   const canApproveVoice = state.workflowState.scriptApproved;
   const waves = Array.from({ length: 44 }, (_, index) => `<i class="wave" style="height:${18 + ((index * 23) % 70)}px;animation-delay:-${(index % 9) / 10}s"></i>`).join("");
   const history = voice.history.map(item => `<div class="history-row"><div class="history-title"><b>${item.name}</b><span>${item.language} · ${item.gender} · ${item.speed.toFixed(2)}x · ${item.duration} · ${item.created}</span></div><button data-action="play-history" data-history="${item.id}">Play</button><button data-action="select-history" data-history="${item.id}">Select</button><button data-action="delete-history" data-history="${item.id}">Delete</button></div>`).join("");
   const comparisons = voice.comparisons.map(item => `<div class="compare-slot"><span class="compare-key">${item.id}</span><div><b>${item.gender} narrator</b><span>${item.language} · ${item.speed.toFixed(2)}x</span></div><div><button data-action="play-compare" data-id="${item.id}">Play ${item.id}</button> <button data-action="select-compare" data-id="${item.id}">${item.selected ? "Selected" : `Select ${item.id}`}</button></div></div>`).join("");
-  return `<section class="screen">${screenHeader("Voice", "Tune voice settings manually and listen to a preview. OmniVoice is the only active engine; this stage must be approved before video rendering.", `<button class="button-secondary" data-action="save-voice-profile">Save Profile</button><button class="button-secondary" data-action="generate-preview">Generate Preview</button><button class="button" data-action="approve-voice" ${canApproveVoice ? "" : "disabled"}>${state.workflowState.voiceApproved ? "Voice approved" : "Approve voice & continue"}</button>`)}
-    <div class="voice-layout"><section class="voice-config"><article class="card card-pad"><p class="eyebrow">Voice engine</p><div class="voice-engine"><div class="voice-engine-icon">◖</div><div><b>OmniVoice</b><span>Active production engine · Edge TTS runtime</span></div><span class="availability">● ACTIVE</span></div>
+  return `<section class="screen">${screenHeader("Voice", "Tune voice settings manually and listen to a preview. OmniVoice is the only active engine; this stage must be approved before video rendering.", `<button class="button-secondary" data-action="save-voice-profile">Save Profile</button><button class="button-secondary" data-action="generate-preview" ${voice.previewStatus === "GENERATING" ? "disabled" : ""}>${voice.previewStatus === "GENERATING" ? "Generating…" : "Generate Preview"}</button><button class="button" data-action="approve-voice" ${canApproveVoice && voice.previewUrl ? "" : "disabled"}>${state.workflowState.voiceApproved ? "Voice approved" : "Approve voice & continue"}</button>`)}
+    <div class="voice-layout"><section class="voice-config"><article class="card card-pad"><p class="eyebrow">Voice engine</p><div class="voice-engine"><div class="voice-engine-icon">◖</div><div><b>OmniVoice</b><span>Local model · CPU inference</span></div><span class="availability">${runtimeLabel}</span></div>${runtime.detail ? `<p class="caption" style="margin-top:10px">${escapeHtml(runtime.detail)}</p>` : ""}
       <div class="form-stack" style="margin-top:15px"><div><label class="control-label">Language <em>${isLanguageReady ? "Supported now" : "Future provider mock"}</em></label><div class="select-with-hint"><select class="select-input" data-setting="voice-language">${optionList(LANGUAGE_CATALOG, voice.language)}</select>${capabilityHint(isLanguageReady, "prototype")}</div></div>
         <div><label class="control-label">Accent / Locale <em>${voice.language === "vi" ? "Default active" : "Mock options"}</em></label><select class="select-input" data-setting="voice-locale">${optionList(localeOptions, voice.locale)}</select></div>
         <div><label class="control-label">Voice Profile</label><select class="select-input" data-setting="voice-profile">${optionList(profileOptions, voice.profileId)}</select><div style="display:flex;gap:4px;margin-top:7px"><button class="button-quiet" data-action="duplicate-profile">Duplicate</button><button class="button-quiet" data-action="rename-profile">Rename</button><button class="button-quiet" data-action="delete-profile">Delete</button></div></div>
       </div></article>
       <article class="card card-pad"><p class="eyebrow">Voice direction</p><div class="form-stack"><div><label class="control-label">Mode <em>Clone is engine-gated</em></label><div class="segmented"><button class="${selectedClass(voice.mode, "auto")}" data-action="voice-mode" data-mode="auto">Auto</button><button class="${selectedClass(voice.mode, "voice_design")}" data-action="voice-mode" data-mode="voice_design">Voice Design</button><button class="unsupported" disabled title="OmniVoice does not support clone yet">Voice Clone</button></div></div>
         <div class="${voice.mode === "voice_design" ? "" : "disabled-layer"}"><label class="control-label">Gender</label><div class="option-pills"><button class="chip-button ${selectedClass(voice.gender, "male")}" data-action="voice-gender" data-value="male">Male</button><button class="chip-button ${selectedClass(voice.gender, "female")}" data-action="voice-gender" data-value="female">Female</button></div></div>
-        <div class="${VOICE_CAPABILITIES.age ? "" : "disabled-layer"}"><label class="control-label">Age <em>${VOICE_CAPABILITIES.age ? "Supported" : "Not supported by OmniVoice"}</em></label><div class="option-pills">${["young adult", "middle-aged", "older adult"].map(value => `<button class="chip-button ${selectedClass(voice.age, value)} ${VOICE_CAPABILITIES.age ? "" : "unsupported"}" ${VOICE_CAPABILITIES.age ? `data-action="voice-age" data-value="${value}"` : "disabled"}>${value}</button>`).join("")}</div></div>
+        <div class="${VOICE_CAPABILITIES.age ? "" : "disabled-layer"}"><label class="control-label">Age <em>${VOICE_CAPABILITIES.age ? "Native voice design" : "Not supported by OmniVoice"}</em></label><div class="option-pills">${["young adult", "middle-aged", "older adult"].map(value => `<button class="chip-button ${selectedClass(voice.age, value)} ${VOICE_CAPABILITIES.age ? "" : "unsupported"}" ${VOICE_CAPABILITIES.age ? `data-action="voice-age" data-value="${value}"` : "disabled"}>${value}</button>`).join("")}</div></div>
         <div><label class="control-label">Pitch</label><div class="option-pills">${["low", "moderate", "high"].map(value => `<button class="chip-button ${selectedClass(voice.pitch, value)}" data-action="voice-pitch" data-value="${value}">${value}</button>`).join("")}</div></div>
         <div class="${VOICE_CAPABILITIES.styles ? "" : "disabled-layer"}"><label class="control-label">Tone / Style <em>${VOICE_CAPABILITIES.styles ? "Supported" : "Future provider capability"}</em></label><div class="option-pills">${["neutral", "warm", "calm", "energetic", "documentary", "friendly", "serious", "educational"].map(value => `<button class="chip-button ${selectedClass(voice.style, value)} ${VOICE_CAPABILITIES.styles ? "" : "unsupported"}" ${VOICE_CAPABILITIES.styles ? `data-action="voice-style" data-value="${value}"` : "disabled"}>${value}</button>`).join("")}</div></div>
         <div class="speed-control"><div class="speed-title"><div><p class="eyebrow">Voice speed</p><b>Rate without pitch shift</b></div><div class="stepper"><button data-action="speed-step" data-direction="-1">−</button><span class="speed-readout">${voice.speed.toFixed(2)}x</span><button data-action="speed-step" data-direction="1">+</button></div></div><input type="range" min="0.85" max="1.20" step="0.01" value="${voice.speed}" data-setting="voice-speed" /><div class="preset-chips">${[[.95,"Slow"],[1,"Normal"],[1.08,"Natural+"],[1.1,"Default"],[1.12,"Fast"],[1.15,"Fast+"]].map(([speed, label]) => `<button class="preset-chip ${Number(speed) === voice.speed ? "active" : ""}" data-action="speed-preset" data-speed="${speed}">${speed.toFixed(2)} ${label}</button>`).join("")}</div></div>
       </div></article>
       <details class="disclosure" ${voice.advancedOpen ? "open" : ""}><summary data-action="toggle-advanced">ADVANCED VOICE CONTROLS <span>⌄</span></summary><div class="advanced-inner disabled-layer"><div class="disabled-notice">These controls are designed for future engines. OmniVoice does not advertise them, so they are disabled.</div>${["Energy", "Expressiveness", "Stability", "Pause Strength", "Sentence Gap", "Emotion Strength"].map(label => `<div><label class="control-label">${label}<em>Unavailable</em></label><input type="range" disabled value="50" /></div>`).join("")}</div></details>
     </section>
-    <section><article class="voice-preview-stage"><div class="preview-stage-head"><div><p class="eyebrow">Preview first</p><h2>Shape narration before rendering</h2></div><span class="preview-state">${voice.previewStatus}</span></div><textarea class="preview-copy" data-setting="preview-text">${escapeHtml(voice.previewText)}</textarea><div class="waveform ${voice.playing ? "playing" : ""}" id="waveform">${waves}</div><div class="preview-controls"><div class="preview-buttons"><button class="button" data-action="generate-preview">Generate Preview</button><button class="button-secondary" data-action="play-preview">${voice.playing ? "Stop" : "Play"}</button></div><span class="audio-detail">Local OmniVoice model required · ${voice.speed.toFixed(2)}x · ${voice.gender === "male" ? "Nam Minh" : "Hoài My"}</span></div><div class="voice-status-grid"><div class="voice-status"><span>Voice Engine</span><b>OmniVoice</b></div><div class="voice-status"><span>Selected Profile</span><b>${escapeHtml((voice.profiles.find(profile => profile.id === voice.profileId) || {}).name || "Custom")}</b></div><div class="voice-status"><span>Subtitle Sync</span><b class="${voice.subtitleSync === "SYNCED" ? "check" : "warning"}">${voice.subtitleSync}</b></div></div>${voice.subtitleSync !== "SYNCED" ? `<button class="button-secondary" style="position:relative;z-index:1;margin-top:11px" data-action="update-timing">Update Timing</button>` : ""}</article>
+    <section><article class="voice-preview-stage"><div class="preview-stage-head"><div><p class="eyebrow">Preview first</p><h2>Shape narration before rendering</h2></div><span class="preview-state">${voice.previewStatus}</span></div><textarea class="preview-copy" data-setting="preview-text">${escapeHtml(voice.previewText)}</textarea><div class="waveform ${voice.playing ? "playing" : ""}" id="waveform">${waves}</div>${voice.previewUrl ? `<audio id="active-voice-preview" class="voice-audio-player" controls preload="metadata" src="${voice.previewUrl}"></audio>` : ""}<div class="preview-controls"><div class="preview-buttons"><button class="button" data-action="generate-preview" ${voice.previewStatus === "GENERATING" ? "disabled" : ""}>${voice.previewStatus === "GENERATING" ? "Generating…" : "Generate Preview"}</button><button class="button-secondary" data-action="play-preview" ${voice.previewUrl ? "" : "disabled"}>${voice.playing ? "Stop" : "Play"}</button></div><span class="audio-detail">Real local OmniVoice · ${voice.speed.toFixed(2)}x · ${escapeHtml(voice.gender)} · ${escapeHtml(voice.age)}</span></div><div class="voice-status-grid"><div class="voice-status"><span>Voice Engine</span><b>OmniVoice</b></div><div class="voice-status"><span>Selected Profile</span><b>Native design</b></div><div class="voice-status"><span>Subtitle Sync</span><b class="${voice.subtitleSync === "SYNCED" ? "check" : "warning"}">${voice.subtitleSync}</b></div></div>${voice.subtitleSync !== "SYNCED" ? `<button class="button-secondary" style="position:relative;z-index:1;margin-top:11px" data-action="update-timing">Update Timing</button>` : ""}</article>
       <div class="voice-lower"><article class="card card-pad"><div class="card-head"><div><p class="eyebrow">Preview history</p><h2 class="card-title">A/B-ready takes</h2></div><span class="caption">${voice.history.length} takes</span></div>${history}</article><article class="card card-pad"><div class="card-head"><div><p class="eyebrow">Compare</p><h2 class="card-title">A / B voice slots</h2></div><button class="button-quiet" data-action="add-compare">+ Add slot</button></div><div class="compare-slots">${comparisons}</div></article></div>
       <article class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Pronunciation Dictionary</p><h2 class="card-title">Names, acronyms, and multilingual corrections</h2></div><span class="caption">Stored by project in future</span></div><div class="dictionary-row"><input id="pronounce-original" class="text-input" placeholder="Original · Gulf Stream" /><input id="pronounce-as" class="text-input" placeholder="Pronounce as" /><button class="button-secondary" data-action="add-pronunciation">Add Rule</button></div><div class="dictionary-list">${voice.pronunciation.map(item => `<div class="dictionary-item"><span><b>${escapeHtml(item.original)}</b> → ${escapeHtml(item.pronunciation)}</span><button class="button-quiet" data-action="delete-pronunciation" data-word="${escapeHtml(item.original)}">Delete</button></div>`).join("")}</div></article>
     </section></div></section>`;
@@ -409,8 +415,8 @@ function renderRender() {
 function renderSettings() {
   const project = activeProject();
   const statuses = ["DRAFT", "UPLOADED", "MAPPED", "SCRIPT_MAPPING", "VOICE_SETUP", "READY_TO_RENDER", "PROCESSING", "RENDERING", "POST_RENDER_REVIEW", "APPROVED", "NEEDS_CHANGES", "DONE"];
-  return `<section class="screen">${screenHeader("Settings", "Workspace defaults remain separate from the active project. Provider integrations, filesystem paths, and rendering jobs are intentionally not wired here.")}
-    <div class="grid two"><section class="card card-pad"><p class="eyebrow">Active project</p><h2 class="card-title">${escapeHtml(project.name)}</h2><div class="form-stack" style="margin-top:16px"><div><label class="field-label">Project status</label><select class="select-input" data-setting="project-stage">${optionList(statuses, state.projectState.stage)}</select></div><div class="form-row"><div><label class="field-label">Format</label><output class="readout">${project.resolution}</output></div><div><label class="field-label">Frame rate</label><output class="readout">${project.fps} fps</output></div></div><p class="caption">Changing this status affects only ${escapeHtml(project.name)}. Future global preferences stay outside each project record.</p></div></section><section class="card card-pad"><p class="eyebrow">Prototype boundary</p><h2 class="card-title">No backend connection</h2><p class="caption">All imports, scripts, previews, voice settings, renders, and exports in this prototype are in-memory UI interactions. OmniVoice is shown as the active engine only; VoiceStudio is intentionally absent.</p></section></div></section>`;
+  return `<section class="screen">${screenHeader("Settings", "Workspace defaults remain separate from the active project. Local files and provider runtime state are scoped to this machine.")}
+    <div class="grid two"><section class="card card-pad"><p class="eyebrow">Active project</p><h2 class="card-title">${escapeHtml(project.name)}</h2><div class="form-stack" style="margin-top:16px"><div><label class="field-label">Project status</label><select class="select-input" data-setting="project-stage">${optionList(statuses, state.projectState.stage)}</select></div><div class="form-row"><div><label class="field-label">Format</label><output class="readout">${project.resolution}</output></div><div><label class="field-label">Frame rate</label><output class="readout">${project.fps} fps</output></div></div><p class="caption">Changing this status affects only ${escapeHtml(project.name)}. Future global preferences stay outside each project record.</p></div></section><section class="card card-pad"><p class="eyebrow">Local runtime</p><h2 class="card-title">${backendOnline ? "Backend connected" : "Backend offline"}</h2><p class="caption">Flow ZIP import, project state, and OmniVoice previews use the local Python service. VoiceStudio is intentionally absent.</p></section></div></section>`;
 }
 
 function renderScreen() {
@@ -451,10 +457,12 @@ function setScreen(screen) { state.uiState.screen = screen; state.uiState.projec
 function selectScene(id) { if (state.sceneState.items.some(scene => scene.id === id)) { state.sceneState.selectedId = id; savePulse(); renderScreen(); } }
 function markVoiceChanged(message = "Voice changed") {
   state.voiceState.subtitleSync = "NEEDS UPDATE";
+  state.voiceState.previewStatus = "NOT GENERATED";
+  state.voiceState.previewUrl = null;
   if (state.workflowState.scriptApproved) { state.workflowState.voiceApproved = false; state.workflowState.previewReady = false; state.projectState.stage = "VOICE_SETUP"; }
   if (backendOnline) {
     const voice = state.voiceState;
-    apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/voice`, { method: "POST", body: JSON.stringify({ mode: voice.mode, language: voice.language, gender: voice.gender, pitch: voice.pitch, speed: voice.speed }) })
+    apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/voice`, { method: "POST", body: JSON.stringify({ mode: voice.mode, language: voice.language, gender: voice.gender, age: voice.age, pitch: voice.pitch, speed: voice.speed }) })
       .then(() => savePulse(`${message} saved locally`))
       .catch(error => toast(error.message, "warning"));
   } else savePulse(message);
@@ -514,7 +522,11 @@ function approveScriptMapping() {
 
 function approveVoice() {
   if (backendOnline) {
-    toast("Approve voice only after a real local OmniVoice preview is generated. The current local runtime is intentionally not substituted with a cloud service.", "warning");
+    if (!state.voiceState.previewUrl) { toast("Generate and listen to an OmniVoice preview first.", "warning"); return; }
+    apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/voice/approve`, { method: "POST", body: "{}" })
+      .then(() => loadBackendProject(state.projectState.id))
+      .then(() => { state.uiState.screen = "render"; toast("OmniVoice preview approved. Full narration is now the next gate.", "success"); renderScreen(); })
+      .catch(error => toast(error.message, "warning"));
     return;
   }
   if (!state.workflowState.scriptApproved) { toast("Approve the script mapping first.", "warning"); return; }
@@ -613,8 +625,32 @@ function chooseFolderPath() {
 }
 function mockImport() { if (backendOnline) { $("#source-zip-input")?.click(); return; } toast("Start the local studio server before importing a source.", "warning"); }
 function simulateScenes(count) { toast("Use a real Flow ZIP or folder for this project.", "warning"); }
-function generatePreview() { toast("Voice preview is blocked until a local OmniVoice runtime with a compatible model license is configured. No cloud fallback is used by this local UI.", "warning"); }
-function togglePlay() { state.voiceState.playing = !state.voiceState.playing; toast(state.voiceState.playing ? "Playing mock preview…" : "Preview stopped."); renderScreen(); }
+async function generatePreview() {
+  const voice = state.voiceState;
+  voice.previewText = $("[data-setting='preview-text']")?.value.trim() || voice.previewText.trim();
+  if (!voice.previewText) { toast("Enter a short preview sentence first.", "warning"); return; }
+  if (!backendOnline) { toast("Start the local studio server before generating OmniVoice.", "warning"); return; }
+  voice.previewStatus = "GENERATING"; voice.previewUrl = null; voice.playing = false; renderScreen();
+  try {
+    const result = await apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/voice/preview`, {
+      method: "POST", body: JSON.stringify({ text: voice.previewText, mode: voice.mode, language: voice.language, gender: voice.gender, age: voice.age, pitch: voice.pitch, speed: voice.speed }),
+    });
+    voice.previewStatus = "GENERATED";
+    voice.previewUrl = `${result.audio_url}?t=${Date.now()}`;
+    voice.history.unshift({ id: result.preview_id, name: `OmniVoice ${voice.gender}`, language: "Vietnamese", gender: voice.gender, speed: voice.speed, duration: `${Number(result.duration || 0).toFixed(1)}s`, created: "just now", url: voice.previewUrl });
+    toast(result.cache_hit ? "Loaded the matching OmniVoice preview from cache." : "OmniVoice preview generated locally.", "success");
+  } catch (error) {
+    voice.previewStatus = "FAILED";
+    toast(error.message, "warning");
+  }
+  renderScreen();
+}
+function togglePlay() {
+  const player = $("#active-voice-preview");
+  if (!player) { toast("Generate an OmniVoice preview first.", "warning"); return; }
+  if (player.paused) { player.play().then(() => { state.voiceState.playing = true; }).catch(error => toast(error.message, "warning")); }
+  else { player.pause(); state.voiceState.playing = false; }
+}
 function saveProfile() { const voice = state.voiceState; const id = `profile-${Date.now()}`; voice.profiles.unshift({ id, name: `Custom ${language().label} ${voice.gender === "male" ? "Male" : "Female"}`, provider: voice.provider, language: voice.language, locale: voice.locale, mode: voice.mode, gender: voice.gender, pitch: voice.pitch, speed: voice.speed }); voice.profileId = id; toast("Voice profile saved to prototype state."); savePulse(); renderScreen(); }
 function useProfile(id) { const profile = state.voiceState.profiles.find(item => item.id === id); if (!profile) return; Object.assign(state.voiceState, { profileId: id, language: profile.language, locale: profile.locale, mode: profile.mode, gender: profile.gender, pitch: profile.pitch, speed: profile.speed, subtitleSync: "NEEDS UPDATE" }); toast(`${profile.name} applied.`); markVoiceChanged("Voice profile changed"); }
 function startRender(quality) { if (backendOnline) { toast("Rendering remains blocked until the local OmniVoice narration gate passes; no mock video is produced in a real project.", "warning"); return; } if (!state.workflowState.scriptApproved || !state.workflowState.voiceApproved) { toast("Approve script mapping and voice before rendering.", "warning"); return; } if (!keptScenes().length) { toast("Keep at least one scene before rendering.", "warning"); return; } const render = state.renderState; state.projectState.stage = "RENDERING"; render.quality = quality; render.status = `RENDERING ${quality.toUpperCase()}`; render.progress = 0; render.activeStep = 0; renderScreen(); const interval = setInterval(() => { render.progress = Math.min(100, render.progress + 9); render.activeStep = Math.min(5, Math.floor(render.progress / 17)); renderScreen(); if (render.progress >= 100) { clearInterval(interval); render.status = quality === "final" ? "FINAL READY FOR REVIEW" : "PREVIEW READY"; render.activeStep = 6; state.workflowState.previewReady = true; state.reviewState.dirty = false; state.projectState.stage = "POST_RENDER_REVIEW"; state.uiState.screen = "scenes"; toast(`${quality === "final" ? "Final" : "Preview"} render complete (mock). Watch it before exporting.`); savePulse("Preview ready for final review"); renderScreen(); } }, 280); }
@@ -673,6 +709,7 @@ document.addEventListener("click", event => {
     case "toggle-voice-override": currentScene().voiceOverride = currentScene().voiceOverride ? null : { language: state.voiceState.language, speed: state.voiceState.speed }; renderInspector(); break;
     case "voice-mode": state.voiceState.mode = target.dataset.mode; markVoiceChanged(); break;
     case "voice-gender": state.voiceState.gender = target.dataset.value; markVoiceChanged(); break;
+    case "voice-age": state.voiceState.age = target.dataset.value; markVoiceChanged(); break;
     case "voice-pitch": state.voiceState.pitch = target.dataset.value; markVoiceChanged(); break;
     case "speed-step": setVoiceSpeed(state.voiceState.speed + Number(target.dataset.direction) * .01); break;
     case "speed-preset": setVoiceSpeed(Number(target.dataset.speed)); break;

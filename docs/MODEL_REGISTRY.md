@@ -6,7 +6,7 @@
 |---|---|---|
 | Story | Existing Gemini story provider | Script and scene intent |
 | Image | Approved cartoon illustration provider | Static 2D scene artwork only |
-| Voice | OmniVoice, EdgeTTS fallback | Narration audio |
+| Voice | Local OmniVoice only | Narration audio |
 | Animation/composition | Remotion 4.0.523 | Programmatic React animation, layouts, mascot, captions, timeline |
 | Audio/final conform | Existing FFmpeg pipeline | Ducking, loudness, mux, compatibility transcode |
 | Scene video source | Manual Google Flow ZIP/folder import | External creation; local map, probe, version and review |
@@ -57,7 +57,7 @@ B?ng ph?n lo?i chi ti?t c?c m? h?nh AI ph?c v? t?ng giai ?o?n trong pipeline:
 - **Active Model**: `OmniVoice` (k2-fsa/OmniVoice)
 - **Status**: ACTIVE
 - **Purpose**: Gi?ng ??c ti?ng Vi?t t? nhi?n, ?m ?p, ??ng nh?t cao ?? v? t?c ??.
-- **Reliable Fallback**: Microsoft Edge TTS (`vi-VN-NamMinhNeural` +4%)
+- **Fallback**: None. The application reports a local runtime or resource error instead of changing providers.
 
 ---
 

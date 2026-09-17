@@ -90,6 +90,7 @@ class ProviderRegistry:
                 "status": health.get("status", "ready" if health.get("available") else "not_installed"),
                 "capabilities": provider.capabilities(),
                 "voices": provider.list_voices() if health.get("available") else [],
+                "health": health,
             }
             list_engines = getattr(provider, "list_engines", None)
             entry["engines"] = list_engines() if health.get("available") and callable(list_engines) else []

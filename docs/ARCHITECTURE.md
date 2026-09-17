@@ -23,7 +23,7 @@ a future upload/review UI.
 ## v0.2 Remotion composition layer
 
 The integration is additive. Existing Python modules still own story generation, storyboard
-planning, approved scene-image generation, OmniVoice/EdgeTTS narration, SFX preparation,
+planning, approved scene-image generation, local OmniVoice narration, SFX preparation,
 review gates, and orchestration. The legacy `CinematicMotionEngine` remains available as a
 fallback and is not called by the Remotion renderer.
 
@@ -62,7 +62,7 @@ T?i li?u n?y m? t? chi ti?t ki?n tr?c module, lu?ng d? li?u v? s? ?? ph? thu?c (
 - **`src.agents.story_agent`**: Ti?p nh?n ch? ??, c?u tr?c k?ch b?n, t?o hook v? chia c?u tho?i theo th?i l??ng m?c ti?u.
 - **`src.storyboard.schema`**: ??nh ngh?a c?u tr?c ph?n c?nh, visual intent, visual metaphor, camera lens v? metadata ki?m tra ch?o (Visual Similarity Guard).
 - **`src.providers.image`**: Giao di?n tr?u t??ng v? c?c adapter sinh ?nh master keyframes (Google Flow, Cloud API, Local).
-- **`src.providers.voice`**: Giao di?n v? adapter t?ng h?p gi?ng ??c ti?ng Vi?t (OmniVoice, EdgeTTS).
+- **`src.providers.voice`**: Provider-neutral voice interface with local OmniVoice as the only active adapter.
 - **`src.video.cinematic_engine`**: Engine chuy?n ??ng 2.5D Depth Saliency, qu?t v?t s?ng Volumetric Light Sweep v? t?o h?t b?i 3D l? l?ng tr?n CPU.
 - **`src.audio.mixer` & `src.audio.sfx_generator`**: T?ng h?p SFX ??ng b? h?nh ??ng (g? ph?m c?, click card, whoosh, chime) v? dynamic ducking nh?c n?n (-14dB).
 - **`src.review.contact_sheet`**: Gh?p to?n b? 8 shot th?nh m?t b?ng contact sheet t?ng h?p ?? con ng??i duy?t ch?t l??ng.
