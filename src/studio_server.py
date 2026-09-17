@@ -266,6 +266,9 @@ class StudioApplication:
             raise StudioApiError("Voice preview text must be 1,000 characters or fewer.")
         manifest = self.update_voice(project_id, request)
         config = VoiceConfig.from_project(manifest)
+        # A manual preview favors responsiveness. Full narration keeps the
+        # provider's 16-step default and therefore has a distinct cache key.
+        config.options = {**config.options, "num_step": 4}
         service = VoiceService(self._project_root(project_id), fallback=False)
         try:
             result = service.generate_voice_preview(config, text)

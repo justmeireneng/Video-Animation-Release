@@ -166,6 +166,7 @@ class TestStudioProject(unittest.TestCase):
             app.approve_voice(self.project_id)
 
         def generate(service, config, sample_text, output_path=None):
+            self.assertEqual(config.options["num_step"], 4)
             output = service.preview_root / "omnivoice-test.wav"
             output.write_bytes(b"RIFF-local-preview")
             return VoiceSynthesisResult(output, "omnivoice", "default", config.language, 1.25, 24000)

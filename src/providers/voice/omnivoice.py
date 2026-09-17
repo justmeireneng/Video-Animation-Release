@@ -12,7 +12,8 @@ from typing import Any
 
 from ..base import VoiceGenerationRequest, VoiceProvider, VoiceSynthesisResult, wav_metadata
 
-MIN_AVAILABLE_MEMORY_BYTES = 3 * 1024**3
+COMFORTABLE_MEMORY_BYTES = 3 * 1024**3
+MIN_COMMIT_HEADROOM_BYTES = 1 * 1024**3
 
 
 class _MemoryStatus(ctypes.Structure):
@@ -25,12 +26,18 @@ class _MemoryStatus(ctypes.Structure):
     ]
 
 
-def _available_memory() -> int | None:
+def _memory_headroom() -> dict[str, int] | None:
     if os.name != "nt":
         return None
     status = _MemoryStatus()
     status.dwLength = ctypes.sizeof(_MemoryStatus)
-    return int(status.ullAvailPhys) if ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)) else None
+    if not ctypes.windll.kernel32.GlobalMemoryStatusEx(ctypes.byref(status)):
+        return None
+    return {
+        "physical": int(status.ullAvailPhys),
+        # Windows reports remaining commit capacity here (RAM + pagefile).
+        "commit": int(status.ullAvailPageFile),
+    }
 
 
 class OmniVoiceProvider(VoiceProvider):
@@ -63,25 +70,45 @@ class OmniVoiceProvider(VoiceProvider):
         return complete[0] if complete else snapshots / "missing"
 
     def _resource_error(self) -> str | None:
-        available = _available_memory()
-        if available is not None and available < MIN_AVAILABLE_MEMORY_BYTES and os.environ.get("OMNIVOICE_ALLOW_LOW_MEMORY") != "1":
+        headroom = _memory_headroom()
+        if headroom is not None and headroom["commit"] < MIN_COMMIT_HEADROOM_BYTES and os.environ.get("OMNIVOICE_ALLOW_LOW_MEMORY") != "1":
             return (
-                f"OmniVoice needs about 3 GB of free RAM for a safe CPU preview; only {available / 1024**3:.1f} GB is free. "
-                "Close memory-heavy apps, then try Generate Preview again."
+                f"OmniVoice cannot start because Windows has only {headroom['commit'] / 1024**3:.1f} GB of memory/pagefile headroom. "
+                "Close one memory-heavy app and try Generate Preview again."
             )
         return None
+
+    def _memory_detail(self) -> tuple[str, str | None, dict[str, float]]:
+        headroom = _memory_headroom()
+        if headroom is None:
+            return "ready", None, {}
+        values = {
+            "free_physical_gb": round(headroom["physical"] / 1024**3, 2),
+            "commit_headroom_gb": round(headroom["commit"] / 1024**3, 2),
+        }
+        if headroom["physical"] < COMFORTABLE_MEMORY_BYTES:
+            return (
+                "ready_low_memory",
+                "Low-memory mode is available: OmniVoice will use the Windows pagefile, so a short CPU preview can take 2–4 minutes.",
+                values,
+            )
+        return "ready", None, values
 
     def is_available(self) -> bool:
         return self.runtime_python.is_file() and self.runner_path.is_file() and (self.model_path / "model.safetensors").is_file()
 
     def health_check(self) -> dict[str, Any]:
         resource_error = self._resource_error()
+        memory_status, memory_detail, memory = self._memory_detail()
+        available = self.is_available()
+        ready = available and resource_error is None
         return {
-            "available": self.is_available(),
-            "ready_for_generation": self.is_available() and resource_error is None,
-            "status": "ready" if self.is_available() and resource_error is None else "low_memory" if self.is_available() else "not_installed",
+            "available": available,
+            "ready_for_generation": ready,
+            "status": memory_status if ready else "memory_exhausted" if available else "not_installed",
             "provider": self.provider_id, "model_id": self.model_id, "model_path": str(self.model_path),
-            "device": self.device, "runtime_backend": "omnivoice_local", "detail": resource_error,
+            "device": self.device, "runtime_backend": "omnivoice_local", "detail": resource_error or memory_detail,
+            "memory": memory,
         }
 
     def capabilities(self) -> dict[str, Any]:
@@ -116,7 +143,8 @@ class OmniVoiceProvider(VoiceProvider):
         payload = {
             "model_path": str(self.model_path.resolve()), "output_path": str(output), "text": request.text,
             "language": request.language, "speed": float(request.options.get("speed", 1.0)),
-            "instruct": self._instruction(request.options), "device": self.device, "num_step": 16,
+            "instruct": self._instruction(request.options), "device": self.device,
+            "num_step": max(4, min(32, int(request.options.get("num_step", 16)))),
         }
         with tempfile.NamedTemporaryFile("w", suffix=".json", encoding="utf-8", delete=False, dir=output.parent) as handle:
             json.dump(payload, handle, ensure_ascii=False)

@@ -83,12 +83,12 @@ class TestVoiceProviders(unittest.TestCase):
                 text="Xin chào", output_path=output,
                 options={"mode": "voice_design", "speed": 1.12, "design": {"gender": "male", "age": "young adult", "pitch": "moderate"}},
             )
-            with patch("src.providers.voice.omnivoice._available_memory", return_value=4 * 1024**3), patch("subprocess.run", side_effect=run):
+            with patch("src.providers.voice.omnivoice._memory_headroom", return_value={"physical": 4 * 1024**3, "commit": 6 * 1024**3}), patch("subprocess.run", side_effect=run):
                 result = provider.generate_voice(request)
             self.assertEqual(result, output.resolve())
             self.assertEqual(provider.last_metrics["backend"], "omnivoice_local")
 
-    def test_omnivoice_health_reports_low_memory_without_loading_model(self):
+    def test_omnivoice_health_allows_pagefile_backed_low_memory_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             runtime, runner, model = root / "python.exe", root / "runner.py", root / "model"
@@ -98,12 +98,28 @@ class TestVoiceProviders(unittest.TestCase):
             (model / "model.safetensors").write_bytes(b"model")
             (model / "audio_tokenizer" / "model.safetensors").write_bytes(b"tokenizer")
             provider = OmniVoiceProvider(runtime_python=runtime, runner_path=runner, model_path=model)
-            with patch("src.providers.voice.omnivoice._available_memory", return_value=512 * 1024**2):
+            with patch("src.providers.voice.omnivoice._memory_headroom", return_value={"physical": 512 * 1024**2, "commit": 2 * 1024**3}):
                 health = provider.health_check()
             self.assertTrue(health["available"])
+            self.assertTrue(health["ready_for_generation"])
+            self.assertEqual(health["status"], "ready_low_memory")
+            self.assertIn("pagefile", health["detail"])
+            self.assertEqual(health["memory"]["free_physical_gb"], 0.5)
+
+    def test_omnivoice_health_blocks_only_when_commit_headroom_is_exhausted(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime, runner, model = root / "python.exe", root / "runner.py", root / "model"
+            runtime.write_bytes(b"")
+            runner.write_text("", encoding="utf-8")
+            (model / "audio_tokenizer").mkdir(parents=True)
+            (model / "model.safetensors").write_bytes(b"model")
+            (model / "audio_tokenizer" / "model.safetensors").write_bytes(b"tokenizer")
+            provider = OmniVoiceProvider(runtime_python=runtime, runner_path=runner, model_path=model)
+            with patch("src.providers.voice.omnivoice._memory_headroom", return_value={"physical": 200 * 1024**2, "commit": 600 * 1024**2}):
+                health = provider.health_check()
             self.assertFalse(health["ready_for_generation"])
-            self.assertEqual(health["status"], "low_memory")
-            self.assertIn("0.5 GB is free", health["detail"])
+            self.assertEqual(health["status"], "memory_exhausted")
 
     def test_default_registry_exposes_only_omnivoice(self):
         providers = ProviderRegistry().catalog()

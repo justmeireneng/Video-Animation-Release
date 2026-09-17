@@ -50,13 +50,19 @@ The active default is:
 }
 ```
 
-On the current CPU-only target, the app requires about 3 GB of free RAM before
-starting a preview worker. If less memory is available it reports the measured
-shortage instead of risking an application or system crash.
+On the current CPU-only target, a short preview uses an isolated worker. With
+less than 3 GB of physical RAM free, the app enters a measured low-memory mode
+and relies on the Windows pagefile; this is slower but remains functional. It
+blocks only when total remaining RAM/pagefile commit capacity is too low to
+start the worker safely.
 
 ## Preview and cache
 
 Voice Control and `python app.py voice-preview <project>` create WAV previews only; neither command renders video. The voice cache reuses an existing audio file only when text, mode, gender, age, pitch, speed, and reference-audio content are identical.
+
+The desktop preview endpoint uses 4 diffusion steps to stay responsive on the
+8 GB target machine. Full scene narration retains the 16-step provider default;
+the two qualities use separate cache entries.
 
 ## VoiceStudio status
 

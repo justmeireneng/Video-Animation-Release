@@ -356,7 +356,9 @@ function capabilityHint(supported, label = "Future provider capability") { retur
 function renderVoice() {
   const voice = state.voiceState;
   const runtime = state.voiceRuntime || {};
-  const runtimeLabel = runtime.ready_for_generation ? "● READY" : runtime.available ? "● RAM LOW" : "● NOT READY";
+  const runtimeLabel = runtime.ready_for_generation
+    ? runtime.status === "ready_low_memory" ? "● LOW-MEM READY" : "● READY"
+    : runtime.available ? "● MEMORY FULL" : "● NOT READY";
   const lang = language();
   const localeOptions = lang.locales.map(locale => ({ id: locale, label: locale === "default" ? "Default" : locale }));
   const profileOptions = voice.profiles.map(profile => ({ id: profile.id, label: profile.name }));
