@@ -225,6 +225,7 @@ class StudioApplication:
         if not isinstance(text, str):
             raise StudioApiError("Script text must be a string.")
         result = ScriptService(self.workspace_root, self._project_id(project_id)).save_bulk(text)
+        self._invalidate_voice_preview(project_id)
         self._mark_render_dirty(project_id)
         return result
 
@@ -243,8 +244,18 @@ class StudioApplication:
         result = ScriptService(self.workspace_root, self._project_id(project_id)).update_scene(
             int(scene.get("index", 0)), narration.strip()
         )
+        self._invalidate_voice_preview(project_id)
         self._mark_render_dirty(project_id)
         return result
+
+    def _invalidate_voice_preview(self, project_id: str) -> None:
+        """A changed script must never keep an audio preview labeled as current."""
+        manifest = self.manager.load(self._project_id(project_id))
+        manifest["voice"] = {
+            **dict(manifest.get("voice") or {}), "approved": False,
+            "selected_preview": None, "preview_file": None, "preview_scene_id": None,
+        }
+        self.manager.save(project_id, manifest)
 
     def approve_script(self, project_id: str) -> dict[str, Any]:
         try:
@@ -309,7 +320,8 @@ class StudioApplication:
         manifest["voice"] = {
             **dict(manifest.get("voice") or {}), "provider": "omnivoice", "mode": mode,
             "language": str(request.get("language", "vi")), "design": design,
-            "speed": round(speed, 2), "approved": False, "selected_preview": None, "preview_file": None,
+            "speed": round(speed, 2), "approved": False, "selected_preview": None,
+            "preview_file": None, "preview_scene_id": None,
         }
         if (manifest.get("render") or {}).get("preview_ready"):
             manifest["render"] = {**dict(manifest.get("render") or {}), "review_dirty": True,
@@ -317,9 +329,19 @@ class StudioApplication:
         return self.manager.save(identifier, manifest)
 
     def generate_voice_preview(self, project_id: str, request: dict[str, Any]) -> dict[str, Any]:
-        text = str(request.get("text", "")).strip()
+        scene_id = request.get("scene_id")
+        if scene_id is not None:
+            if not isinstance(scene_id, str) or not PROJECT_ID.fullmatch(scene_id):
+                raise StudioApiError("Invalid scene id.", HTTPStatus.NOT_FOUND)
+            remotion = self._read_json(self._project_root(project_id) / "remotion.json")
+            scene = next((item for item in remotion.get("scenes", []) if item.get("id") == scene_id), None)
+            if scene is None:
+                raise StudioApiError("Scene not found.", HTTPStatus.NOT_FOUND)
+            text = str(scene.get("narration", "")).strip()
+        else:
+            text = str(request.get("text", "")).strip()
         if not text:
-            raise StudioApiError("Enter preview text before generating voice.")
+            raise StudioApiError("Map narration for this scene before generating voice.")
         if len(text) > 1_000:
             raise StudioApiError("Voice preview text must be 1,000 characters or fewer.")
         preview_scope = str(request.get("preview_scope", "quick"))
@@ -344,13 +366,13 @@ class StudioApplication:
         preview_id = preview.stem
         manifest["voice"] = {
             **dict(manifest.get("voice") or {}), "preview_file": preview.relative_to(root).as_posix(),
-            "selected_preview": preview_id, "approved": False,
+            "selected_preview": preview_id, "preview_scene_id": scene_id, "approved": False,
         }
         self.manager.save(project_id, manifest)
         return {
             **result.to_dict(), "preview_id": preview_id,
             "audio_url": f"/api/projects/{project_id}/voice/preview", "metrics": service.last_metrics,
-            "preview_scope": preview_scope, "preview_text": synthesis_text,
+            "preview_scope": preview_scope, "preview_text": synthesis_text, "scene_id": scene_id,
         }
 
     @staticmethod

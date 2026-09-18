@@ -64,7 +64,7 @@ const state = {
   scriptState: { bulkText: "", mapped: 0, missing: 0, approved: false },
   voiceState: {
     provider: "omnivoice", language: "vi", locale: "default", mode: "voice_design", gender: "male", age: "young adult", pitch: "moderate", style: "documentary", speed: 1.1,
-    profileId: null, previewText: DEFAULT_NARRATION, previewStatus: "NOT GENERATED", previewUrl: null, playing: false, subtitleSync: "PENDING", advancedOpen: false,
+    profileId: null, previewSceneId: null, previewStatus: "NOT GENERATED", previewUrl: null, playing: false, subtitleSync: "PENDING", advancedOpen: false,
     profiles: [], history: [], comparisons: [], pronunciation: [],
   },
   voiceRuntime: { available: false, ready_for_generation: false, status: "checking", detail: "Checking local OmniVoice runtime…" },
@@ -114,6 +114,7 @@ function applyBackendProject(detail) {
   const remotion = detail.remotion || {};
   const voice = manifest.voice || {};
   const summary = projectSummaryForUi({ id: manifest.id, name: manifest.name, status: manifest.status || detail.workflow?.status, scene_count: detail.scenes?.length, imported: manifest.source?.imported });
+  const previousSelection = state.projectState.id === summary.id ? state.sceneState.selectedId : null;
   const existing = state.workspaceState.projects.find(item => item.id === summary.id);
   if (existing) Object.assign(existing, summary); else state.workspaceState.projects.unshift(summary);
   state.workspaceState.activeProjectId = summary.id;
@@ -134,7 +135,8 @@ function applyBackendProject(detail) {
         decision: manifest.render?.scene_decisions?.[item.id] || "keep", voiceOverride: null,
       };
     }),
-    selectedId: detail.scenes?.[0]?.id || null, sceneCount: detail.scenes?.length || 0, timelineZoom: 1,
+    selectedId: detail.scenes?.some(item => item.id === previousSelection) ? previousSelection : detail.scenes?.[0]?.id || null,
+    sceneCount: detail.scenes?.length || 0, timelineZoom: 1,
   };
   const projectAudio = manifest.audio || {};
   const firstSourceAudio = state.sceneState.items[0]?.sourceAudio || {};
@@ -147,7 +149,7 @@ function applyBackendProject(detail) {
     bgm: Math.round(Number(projectAudio.bgm_volume ?? 0.12) * 100),
   };
   state.scriptState = { bulkText: detail.script_text || "", mapped: state.sceneState.items.filter(scene => scene.narration).length, missing: state.sceneState.items.filter(scene => !scene.narration).length, approved: Boolean(manifest.script?.approved) };
-  state.voiceState = { ...structuredClone(DEFAULT_VOICE_STATE), provider: voice.provider || "omnivoice", language: voice.language || "vi", locale: voice.locale || "default", mode: voice.mode || "voice_design", gender: voice.design?.gender || "male", age: voice.design?.age || "young adult", pitch: voice.design?.pitch || "moderate", speed: voice.speed || 1.1, previewStatus: voice.preview_file ? "GENERATED" : "NOT GENERATED", previewUrl: voice.preview_file ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/voice/preview?t=${encodeURIComponent(manifest.updated_at || "")}` : null };
+  state.voiceState = { ...structuredClone(DEFAULT_VOICE_STATE), provider: voice.provider || "omnivoice", language: voice.language || "vi", locale: voice.locale || "default", mode: voice.mode || "voice_design", gender: voice.design?.gender || "male", age: voice.design?.age || "young adult", pitch: voice.design?.pitch || "moderate", speed: voice.speed || 1.1, previewSceneId: voice.preview_scene_id || null, previewStatus: voice.preview_file ? "GENERATED" : "NOT GENERATED", previewUrl: voice.preview_file ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/voice/preview?t=${encodeURIComponent(manifest.updated_at || "")}` : null };
   state.workflowState = { scriptApproved: Boolean(manifest.script?.approved), voiceApproved: Boolean(voice.approved), previewReady: Boolean(manifest.render?.preview_ready), previewApproved: Boolean(manifest.render?.preview_approved), finalReady: Boolean(manifest.render?.final_ready) };
   state.reviewState = { finalized: Boolean(manifest.render?.final_ready), dirty: Boolean(manifest.render?.review_dirty), showCutsOnly: false };
   state.automationState = { status: summary.imported ? "SOURCE READY" : "IDLE", progress: summary.imported ? 100 : 0, step: summary.imported ? 1 : 0 };
@@ -378,6 +380,12 @@ function capabilityHint(supported, label = "Future provider capability") { retur
 
 function renderVoice() {
   const voice = state.voiceState;
+  const selected = currentScene();
+  const selectedNumber = selected ? String(selected.number).padStart(2, "0") : "--";
+  const activePreviewUrl = selected && voice.previewSceneId === selected.id ? voice.previewUrl : null;
+  const activePreviewStatus = voice.previewStatus === "GENERATING"
+    ? voice.previewSceneId === selected?.id ? "GENERATING" : "GENERATING ANOTHER SCENE"
+    : activePreviewUrl ? voice.previewStatus : "NOT GENERATED";
   const runtime = state.voiceRuntime || {};
   const runtimeLabel = runtime.ready_for_generation
     ? runtime.status === "ready_low_memory" ? "● LOW-MEM READY" : "● READY"
@@ -391,7 +399,7 @@ function renderVoice() {
   const waves = Array.from({ length: 44 }, (_, index) => `<i class="wave" style="height:${18 + ((index * 23) % 70)}px;animation-delay:-${(index % 9) / 10}s"></i>`).join("");
   const history = voice.history.map(item => `<div class="history-row"><div class="history-title"><b>${item.name}</b><span>${item.language} · ${item.gender} · ${item.speed.toFixed(2)}x · ${item.duration} · ${item.created}</span></div><button data-action="play-history" data-history="${item.id}">Play</button><button data-action="select-history" data-history="${item.id}">Select</button><button data-action="delete-history" data-history="${item.id}">Delete</button></div>`).join("");
   const comparisons = voice.comparisons.map(item => `<div class="compare-slot"><span class="compare-key">${item.id}</span><div><b>${item.gender} narrator</b><span>${item.language} · ${item.speed.toFixed(2)}x</span></div><div><button data-action="play-compare" data-id="${item.id}">Play ${item.id}</button> <button data-action="select-compare" data-id="${item.id}">${item.selected ? "Selected" : `Select ${item.id}`}</button></div></div>`).join("");
-  return `<section class="screen">${screenHeader("Voice", "Tune voice settings manually and listen to a preview. OmniVoice is the only active engine; this stage must be approved before video rendering.", `<button class="button-secondary" data-action="save-voice-profile">Save Profile</button><button class="button-secondary" data-action="generate-preview" ${voice.previewStatus === "GENERATING" ? "disabled" : ""}>${voice.previewStatus === "GENERATING" ? "Generating…" : "Generate Preview"}</button><button class="button" data-action="approve-voice" ${canApproveVoice && voice.previewUrl ? "" : "disabled"}>${state.workflowState.voiceApproved ? "Voice approved" : "Approve voice & continue"}</button>`)}
+  return `<section class="screen">${screenHeader("Voice", "Select a scene to preview its mapped narration. OmniVoice is the only active engine; approve the voice before video rendering.", `<button class="button-secondary" data-action="save-voice-profile">Save Profile</button><button class="button-secondary" data-action="generate-preview" ${voice.previewStatus === "GENERATING" || !selected?.narration ? "disabled" : ""}>${voice.previewStatus === "GENERATING" ? "Generating…" : "Generate Preview"}</button><button class="button" data-action="approve-voice" ${canApproveVoice && activePreviewUrl ? "" : "disabled"}>${state.workflowState.voiceApproved ? "Voice approved" : "Approve voice & continue"}</button>`)}
     <div class="voice-layout"><section class="voice-config"><article class="card card-pad"><p class="eyebrow">Voice engine</p><div class="voice-engine"><div class="voice-engine-icon">◖</div><div><b>OmniVoice</b><span>Local model · CPU inference</span></div><span class="availability">${runtimeLabel}</span></div>${runtime.detail ? `<p class="caption" style="margin-top:10px">${escapeHtml(runtime.detail)}</p>` : ""}
       <div class="form-stack" style="margin-top:15px"><div><label class="control-label">Language <em>${isLanguageReady ? "Supported now" : "Future provider mock"}</em></label><div class="select-with-hint"><select class="select-input" data-setting="voice-language">${optionList(LANGUAGE_CATALOG, voice.language)}</select>${capabilityHint(isLanguageReady, "prototype")}</div></div>
         <div><label class="control-label">Accent / Locale <em>${voice.language === "vi" ? "Default active" : "Mock options"}</em></label><select class="select-input" data-setting="voice-locale">${optionList(localeOptions, voice.locale)}</select></div>
@@ -406,7 +414,7 @@ function renderVoice() {
       </div></article>
       <details class="disclosure" ${voice.advancedOpen ? "open" : ""}><summary data-action="toggle-advanced">ADVANCED VOICE CONTROLS <span>⌄</span></summary><div class="advanced-inner disabled-layer"><div class="disabled-notice">These controls are designed for future engines. OmniVoice does not advertise them, so they are disabled.</div>${["Energy", "Expressiveness", "Stability", "Pause Strength", "Sentence Gap", "Emotion Strength"].map(label => `<div><label class="control-label">${label}<em>Unavailable</em></label><input type="range" disabled value="50" /></div>`).join("")}</div></details>
     </section>
-    <section><article class="voice-preview-stage"><div class="preview-stage-head"><div><p class="eyebrow">Preview first</p><h2>Shape narration before rendering</h2></div><span class="preview-state">${voice.previewStatus}</span></div><textarea class="preview-copy" data-setting="preview-text">${escapeHtml(voice.previewText)}</textarea><div class="waveform ${voice.playing ? "playing" : ""}" id="waveform">${waves}</div>${voice.previewUrl ? `<audio id="active-voice-preview" class="voice-audio-player" controls preload="metadata" src="${voice.previewUrl}"></audio>` : ""}<div class="preview-controls"><div class="preview-buttons"><button class="button" data-action="generate-preview" ${voice.previewStatus === "GENERATING" ? "disabled" : ""}>${voice.previewStatus === "GENERATING" ? "Generating…" : "Quick Preview"}</button><button class="button-secondary" data-action="generate-full-preview" ${voice.previewStatus === "GENERATING" ? "disabled" : ""}>Full sentence</button><button class="button-secondary" data-action="play-preview" ${voice.previewUrl ? "" : "disabled"}>${voice.playing ? "Stop" : "Play"}</button></div><span class="audio-detail">Quick uses the first phrase · Real local OmniVoice · ${voice.speed.toFixed(2)}x</span></div><div class="voice-status-grid"><div class="voice-status"><span>Voice Engine</span><b>OmniVoice</b></div><div class="voice-status"><span>Selected Profile</span><b>Native design</b></div><div class="voice-status"><span>Subtitle Sync</span><b class="${voice.subtitleSync === "SYNCED" ? "check" : "warning"}">${voice.subtitleSync}</b></div></div>${voice.subtitleSync !== "SYNCED" ? `<button class="button-secondary" style="position:relative;z-index:1;margin-top:11px" data-action="update-timing">Update Timing</button>` : ""}</article>
+    <section><article class="voice-preview-stage"><div class="preview-stage-head"><div><p class="eyebrow">Scene ${selectedNumber} · mapped script</p><h2>Preview this scene's narration</h2></div><span class="preview-state">${activePreviewStatus}</span></div><textarea class="preview-copy" readonly aria-label="Scene ${selectedNumber} mapped narration">${escapeHtml(selected?.narration || "")}</textarea><p class="caption">To change these words, edit Scene ${selectedNumber} on the Script page. Voice settings below do not change scene mapping.</p><div class="waveform ${voice.playing && activePreviewUrl ? "playing" : ""}" id="waveform">${waves}</div>${activePreviewUrl ? `<audio id="active-voice-preview" class="voice-audio-player" controls preload="metadata" src="${activePreviewUrl}"></audio>` : ""}<div class="preview-controls"><div class="preview-buttons"><button class="button" data-action="generate-preview" ${voice.previewStatus === "GENERATING" || !selected?.narration ? "disabled" : ""}>${voice.previewStatus === "GENERATING" ? "Generating…" : "Quick Preview"}</button><button class="button-secondary" data-action="generate-full-preview" ${voice.previewStatus === "GENERATING" || !selected?.narration ? "disabled" : ""}>Full sentence</button><button class="button-secondary" data-action="play-preview" ${activePreviewUrl ? "" : "disabled"}>${voice.playing ? "Stop" : "Play"}</button></div><span class="audio-detail">Quick uses the first phrase · Real local OmniVoice · ${voice.speed.toFixed(2)}x</span></div><div class="voice-status-grid"><div class="voice-status"><span>Voice Engine</span><b>OmniVoice</b></div><div class="voice-status"><span>Selected Profile</span><b>Native design</b></div><div class="voice-status"><span>Subtitle Sync</span><b class="${voice.subtitleSync === "SYNCED" ? "check" : "warning"}">${voice.subtitleSync}</b></div></div>${voice.subtitleSync !== "SYNCED" ? `<button class="button-secondary" style="position:relative;z-index:1;margin-top:11px" data-action="update-timing">Update Timing</button>` : ""}</article>
       <div class="voice-lower"><article class="card card-pad"><div class="card-head"><div><p class="eyebrow">Preview history</p><h2 class="card-title">A/B-ready takes</h2></div><span class="caption">${voice.history.length} takes</span></div>${history}</article><article class="card card-pad"><div class="card-head"><div><p class="eyebrow">Compare</p><h2 class="card-title">A / B voice slots</h2></div><button class="button-quiet" data-action="add-compare">+ Add slot</button></div><div class="compare-slots">${comparisons}</div></article></div>
       <article class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Pronunciation Dictionary</p><h2 class="card-title">Names, acronyms, and multilingual corrections</h2></div><span class="caption">Stored by project in future</span></div><div class="dictionary-row"><input id="pronounce-original" class="text-input" placeholder="Original · Gulf Stream" /><input id="pronounce-as" class="text-input" placeholder="Pronounce as" /><button class="button-secondary" data-action="add-pronunciation">Add Rule</button></div><div class="dictionary-list">${voice.pronunciation.map(item => `<div class="dictionary-item"><span><b>${escapeHtml(item.original)}</b> → ${escapeHtml(item.pronunciation)}</span><button class="button-quiet" data-action="delete-pronunciation" data-word="${escapeHtml(item.original)}">Delete</button></div>`).join("")}</div></article>
     </section></div></section>`;
@@ -482,11 +490,12 @@ function renderTimeline() {
 }
 
 function setScreen(screen) { state.uiState.screen = screen; state.uiState.projectMenuOpen = false; renderScreen(); }
-function selectScene(id) { if (state.sceneState.items.some(scene => scene.id === id)) { state.sceneState.selectedId = id; savePulse(); renderScreen(); } }
+function selectScene(id) { if (state.sceneState.items.some(scene => scene.id === id)) { state.sceneState.selectedId = id; state.voiceState.playing = false; savePulse(); renderScreen(); } }
 function markVoiceChanged(message = "Voice changed") {
   state.voiceState.subtitleSync = "NEEDS UPDATE";
   state.voiceState.previewStatus = "NOT GENERATED";
   state.voiceState.previewUrl = null;
+  state.voiceState.previewSceneId = null;
   if (state.workflowState.scriptApproved) { state.workflowState.voiceApproved = false; state.workflowState.previewReady = false; state.projectState.stage = "VOICE_SETUP"; }
   if (backendOnline) {
     const voice = state.voiceState;
@@ -683,17 +692,20 @@ function mockImport() { if (backendOnline) { $("#source-zip-input")?.click(); re
 function simulateScenes(count) { toast("Use a real Flow ZIP or folder for this project.", "warning"); }
 async function generatePreview(previewScope = "quick") {
   const voice = state.voiceState;
-  voice.previewText = $("[data-setting='preview-text']")?.value.trim() || voice.previewText.trim();
-  if (!voice.previewText) { toast("Enter a short preview sentence first.", "warning"); return; }
+  const scene = currentScene();
+  const sceneId = scene?.id;
+  const narration = scene?.narration?.trim() || "";
+  if (!sceneId || !narration) { toast("Map narration for the selected scene first.", "warning"); return; }
   if (!backendOnline) { toast("Start the local studio server before generating OmniVoice.", "warning"); return; }
-  voice.previewStatus = "GENERATING"; voice.previewUrl = null; voice.playing = false; renderScreen();
+  voice.previewStatus = "GENERATING"; voice.previewUrl = null; voice.previewSceneId = sceneId; voice.playing = false; renderScreen();
   try {
     const result = await apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/voice/preview`, {
-      method: "POST", body: JSON.stringify({ text: voice.previewText, preview_scope: previewScope, mode: voice.mode, language: voice.language, gender: voice.gender, age: voice.age, pitch: voice.pitch, speed: voice.speed }),
+      method: "POST", body: JSON.stringify({ scene_id: sceneId, preview_scope: previewScope, mode: voice.mode, language: voice.language, gender: voice.gender, age: voice.age, pitch: voice.pitch, speed: voice.speed }),
     });
     voice.previewStatus = "GENERATED";
+    voice.previewSceneId = result.scene_id || sceneId;
     voice.previewUrl = `${result.audio_url}?t=${Date.now()}`;
-    voice.history.unshift({ id: result.preview_id, name: `OmniVoice ${voice.gender}`, language: "Vietnamese", gender: voice.gender, speed: voice.speed, duration: `${Number(result.duration || 0).toFixed(1)}s`, created: "just now", url: voice.previewUrl });
+    voice.history.unshift({ id: result.preview_id, name: `Scene ${String(scene.number).padStart(2, "0")} · OmniVoice ${voice.gender}`, language: "Vietnamese", gender: voice.gender, speed: voice.speed, duration: `${Number(result.duration || 0).toFixed(1)}s`, created: "just now", url: voice.previewUrl });
     toast(result.cache_hit ? "Loaded the matching OmniVoice preview from cache." : `${result.preview_scope === "quick" ? "Quick" : "Full"} OmniVoice preview generated locally.`, "success");
   } catch (error) {
     voice.previewStatus = "FAILED";
@@ -898,7 +910,6 @@ document.addEventListener("change", event => {
   if (setting === "voice-locale") { state.voiceState.locale = target.value; markVoiceChanged(); }
   if (setting === "voice-profile") useProfile(target.value);
   if (setting === "voice-speed") setVoiceSpeed(target.value);
-  if (setting === "preview-text") { state.voiceState.previewText = target.value; }
   if (setting === "subtitle-language") { state.subtitleState.language = target.value; }
   if (setting === "subtitle-size") { state.subtitleState.size = Number(target.value); }
   if (setting === "audio-source-mode") { state.audioState.sourceMode = target.value; saveProjectAudio(); renderScreen(); }

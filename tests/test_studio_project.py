@@ -373,6 +373,35 @@ class TestStudioProject(unittest.TestCase):
         self.assertTrue(approved["voice"]["approved"])
         self.assertEqual(approved["status"], "READY_TO_RENDER")
 
+    def test_voice_preview_uses_selected_scene_mapping_and_invalidates_after_script_edit(self):
+        self.manager.ensure_scene_slots(self.project_id, [1, 2])
+        app = StudioApplication(self.root)
+        app.update_scene_script(self.project_id, "scene_01", "Lời thoại cảnh một.")
+        app.update_scene_script(self.project_id, "scene_02", "Lời thoại cảnh hai.")
+
+        def generate(service, config, sample_text, output_path=None):
+            self.assertEqual(sample_text, "Lời thoại cảnh hai.")
+            output = service.preview_root / "omnivoice-scene-two.wav"
+            output.write_bytes(b"RIFF-scene-two")
+            return VoiceSynthesisResult(output, "omnivoice", "default", config.language, 1.25, 24000)
+
+        with patch("src.studio_server.VoiceService.generate_voice_preview", autospec=True, side_effect=generate):
+            response = app.generate_voice_preview(self.project_id, {
+                "scene_id": "scene_02", "text": "Lời thoại cảnh một.", "preview_scope": "full",
+                "mode": "voice_design", "language": "vi", "gender": "male",
+                "age": "young adult", "pitch": "moderate", "speed": 1.10,
+            })
+        self.assertEqual(response["scene_id"], "scene_02")
+        self.assertEqual(self.manager.load(self.project_id)["voice"]["preview_scene_id"], "scene_02")
+
+        app.update_scene_script(self.project_id, "scene_02", "Lời thoại cảnh hai đã đổi.")
+        voice = self.manager.load(self.project_id)["voice"]
+        self.assertIsNone(voice["preview_file"])
+        self.assertIsNone(voice["preview_scene_id"])
+        self.assertFalse(voice["approved"])
+        with self.assertRaisesRegex(Exception, "Generate a voice preview"):
+            app.approve_voice(self.project_id)
+
     def test_quick_preview_clips_long_text_but_full_preview_keeps_it(self):
         app = StudioApplication(self.root)
         text = "Hàn Quốc là nơi những cung điện cổ, khu phố truyền thống và lịch sử lâu đời cùng tồn tại."
