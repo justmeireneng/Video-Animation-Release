@@ -282,11 +282,22 @@ class OmniVoiceProvider(VoiceProvider):
             "num_step": max(4, min(32, int(request.options.get("num_step", 16)))),
         }
         try:
-            self.last_metrics = (
-                self._cold_request(payload, output)
-                if os.environ.get("OMNIVOICE_DISABLE_WARM_WORKER") == "1"
-                else self._worker_request(payload)
-            )
+            if os.environ.get("OMNIVOICE_DISABLE_WARM_WORKER") == "1":
+                self.last_metrics = self._cold_request(payload, output)
+            else:
+                try:
+                    self.last_metrics = self._worker_request(payload)
+                except RuntimeError as exc:
+                    # OmniVoice/Transformers can very occasionally leave the
+                    # retained tokenizer in an invalid state between requests.
+                    # A clean process succeeds with the same text, so recover
+                    # once automatically instead of making the user retry the
+                    # whole render from the UI.
+                    if "TextEncodeInput" not in str(exc):
+                        raise
+                    type(self).shutdown_warm_worker()
+                    self.last_metrics = self._cold_request(payload, output)
+                    self.last_metrics["recovered_from_warm_worker"] = True
         except RuntimeError:
             output.unlink(missing_ok=True)
             raise

@@ -119,6 +119,36 @@ class TestVoiceProviders(unittest.TestCase):
             finally:
                 OmniVoiceProvider.shutdown_warm_worker()
 
+    def test_omnivoice_recovers_from_transient_warm_tokenizer_error(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime, runner, model = root / "python.exe", root / "runner.py", root / "model"
+            runtime.write_bytes(b"")
+            runner.write_text("", encoding="utf-8")
+            (model / "audio_tokenizer").mkdir(parents=True)
+            (model / "model.safetensors").write_bytes(b"model")
+            (model / "audio_tokenizer" / "model.safetensors").write_bytes(b"tokenizer")
+            output = root / "preview.wav"
+            provider = OmniVoiceProvider(runtime_python=runtime, runner_path=runner, model_path=model)
+            request = VoiceGenerationRequest(text="Xin chào", output_path=output, options={"mode": "auto"})
+
+            def cold_retry(_payload, path):
+                path.write_bytes(wav_bytes())
+                return {"backend": "omnivoice_local", "warm_model": False}
+
+            with (
+                patch("src.providers.voice.omnivoice._memory_headroom", return_value={"physical": 4 * 1024**3, "commit": 6 * 1024**3}),
+                patch.object(provider, "_worker_request", side_effect=RuntimeError("TypeError: TextEncodeInput must be Union[...]")),
+                patch.object(provider, "_cold_request", side_effect=cold_retry) as retry,
+                patch.object(OmniVoiceProvider, "shutdown_warm_worker") as shutdown,
+            ):
+                result = provider.generate_voice(request)
+
+            self.assertEqual(result, output.resolve())
+            self.assertTrue(provider.last_metrics["recovered_from_warm_worker"])
+            shutdown.assert_called_once_with()
+            retry.assert_called_once()
+
     def test_omnivoice_health_allows_pagefile_backed_low_memory_mode(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

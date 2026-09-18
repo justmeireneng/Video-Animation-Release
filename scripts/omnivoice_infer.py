@@ -27,8 +27,17 @@ def _runtime():
 def _generate(request, model, sf, *, load_seconds: float, warm_model: bool) -> dict:
     started = time.perf_counter()
     device = str(request.get("device") or "cpu")
+    text = request.get("text")
+    if not isinstance(text, str) or not text.strip():
+        raise TypeError("text must be a non-empty string")
+    language = request.get("language")
+    if language is not None and not isinstance(language, str):
+        raise TypeError("language must be a string or null")
+    instruct = request.get("instruct")
+    if instruct is not None and not isinstance(instruct, str):
+        raise TypeError("instruct must be a string or null")
     audio = model.generate(
-        text=request["text"], language=request.get("language") or "vi", instruct=request.get("instruct"),
+        text=text.strip(), language=(language or "vi").strip(), instruct=instruct.strip() if instruct else None,
         speed=float(request.get("speed", 1.0)), num_step=int(request.get("num_step", 16)),
     )
     output = Path(request["output_path"])
