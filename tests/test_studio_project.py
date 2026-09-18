@@ -95,6 +95,20 @@ class TestStudioProject(unittest.TestCase):
         validation = service.validation()
         self.assertTrue(all(item["script"] == "SCRIPT_OK" for item in validation))
 
+    def test_application_updates_only_the_selected_scene_script(self):
+        self.manager.ensure_scene_slots(self.project_id, [1, 2])
+        app = StudioApplication(self.root)
+        app.update_scene_script(self.project_id, "scene_01", "Lời thoại riêng của cảnh một.")
+        app.update_scene_script(self.project_id, "scene_02", "Lời thoại riêng của cảnh hai.")
+        app.update_scene_script(self.project_id, "scene_02", "Cảnh hai đã được chỉnh lại.")
+
+        detail = app.project(self.project_id)
+        narration_by_id = {scene["id"]: scene["narration"] for scene in detail["scenes"]}
+        self.assertEqual(narration_by_id["scene_01"], "Lời thoại riêng của cảnh một.")
+        self.assertEqual(narration_by_id["scene_02"], "Cảnh hai đã được chỉnh lại.")
+        self.assertIn('SCENE 1\nNarration:\n"Lời thoại riêng của cảnh một."', detail["script_text"])
+        self.assertIn('SCENE 2\nNarration:\n"Cảnh hai đã được chỉnh lại."', detail["script_text"])
+
     def test_final_render_preflight_requires_preview_approval(self):
         self.manager.ensure_scene_slots(self.project_id, [1])
         service = ScriptService(self.root, self.project_id)

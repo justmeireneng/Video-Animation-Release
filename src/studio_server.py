@@ -217,6 +217,24 @@ class StudioApplication:
         self._mark_render_dirty(project_id)
         return result
 
+    def update_scene_script(self, project_id: str, scene_id: str, narration: str) -> dict[str, Any]:
+        """Update exactly one scene without applying its narration to its neighbours."""
+        self._ensure_render_idle(project_id)
+        if not isinstance(narration, str) or not narration.strip():
+            raise StudioApiError("Scene narration cannot be empty.")
+        if not PROJECT_ID.fullmatch(scene_id):
+            raise StudioApiError("Invalid scene id.", HTTPStatus.NOT_FOUND)
+        root = self._project_root(project_id)
+        remotion = self._read_json(root / "remotion.json")
+        scene = next((item for item in remotion.get("scenes", []) if str(item.get("id")) == scene_id), None)
+        if scene is None:
+            raise StudioApiError("Scene not found.", HTTPStatus.NOT_FOUND)
+        result = ScriptService(self.workspace_root, self._project_id(project_id)).update_scene(
+            int(scene.get("index", 0)), narration.strip()
+        )
+        self._mark_render_dirty(project_id)
+        return result
+
     def approve_script(self, project_id: str) -> dict[str, Any]:
         try:
             return ScriptService(self.workspace_root, self._project_id(project_id)).approve_mapping()
@@ -728,6 +746,10 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
                 return
             if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3:] == ["script", "approve"]:
                 self._json(HTTPStatus.OK, self.app.approve_script(parts[2]))
+                return
+            if len(parts) == 6 and parts[:2] == ["api", "projects"] and parts[3] == "scenes" and parts[5] == "script":
+                body = self._body_json()
+                self._json(HTTPStatus.OK, self.app.update_scene_script(parts[2], parts[4], body.get("narration", "")))
                 return
             if len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] == "voice":
                 self._json(HTTPStatus.OK, self.app.update_voice(parts[2], self._body_json()))

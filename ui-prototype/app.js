@@ -351,10 +351,12 @@ function renderImport() {
 function renderScript() {
   if (!state.sceneState.items.length) return `<section class="screen">${screenHeader("Script Mapping", "Import a source ZIP first. Scene slots are created from the detected source files.", `<button class="button" data-nav="import">Import source</button>`)}<div class="empty-state"><div><h2>No scene slots yet</h2><p>Once the ZIP has been scanned, paste a script with SCENE blocks and review the proposed mapping here.</p></div></div></section>`;
   const allMapped = state.scriptState.mapped === state.sceneState.items.length;
-  const previewRows = state.sceneState.items.map(scene => `<div class="validation-row"><span class="${scene.narration ? "check" : "warning"}">${scene.narration ? "✓" : "▲"}</span><div><b>Scene ${String(scene.number).padStart(2, "0")}</b><span class="muted">${escapeHtml(scene.sourceFilename || "Source missing")} · Script ${scene.narration ? "mapped" : "missing"}</span>${scene.narration ? `<small class="muted">${escapeHtml(scene.narration.length > 96 ? `${scene.narration.slice(0, 96)}…` : scene.narration)}</small>` : ""}</div></div>`).join("");
-  return `<section class="screen">${screenHeader("Script Mapping", "Paste the script you want for each scene. The app proposes the mapping; you inspect it and approve it before voice or rendering can continue.", `<button class="button-secondary" data-action="parse-script">Map & review</button><button class="button" data-action="approve-script-mapping" ${allMapped && !state.scriptState.approved ? "" : "disabled"}>${state.scriptState.approved ? "Mapping approved" : "Approve mapping"}</button>`)}
-    <div class="script-layout"><section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Your scene script</p><h2 class="card-title">Narration by scene</h2></div><span class="caption">${state.scriptState.mapped} / ${state.sceneState.items.length} mapped</span></div><label class="field-label">Paste format <small>SCENE 1 → Narration: → “text”</small></label><textarea id="bulk-script" class="textarea-input">${escapeHtml(state.scriptState.bulkText)}</textarea><div style="display:flex;justify-content:space-between;align-items:center;margin-top:12px"><span class="caption">Mapping stays in draft until you approve it. Nothing is rendered yet.</span><button class="button" data-action="parse-script">Parse & review</button></div></section>
-      <aside class="card card-pad"><div class="card-head"><div><p class="eyebrow">Mapping review</p><h2 class="card-title">Confirm every scene</h2></div><span class="status-tag ${state.scriptState.approved ? "ready" : allMapped ? "review" : "pending"}">${state.scriptState.approved ? "Approved" : allMapped ? "Ready to approve" : `${state.scriptState.missing} missing`}</span></div>${previewRows}<button class="button-secondary" data-action="approve-script-mapping" ${allMapped && !state.scriptState.approved ? "" : "disabled"} style="margin-top:12px;width:100%">${state.scriptState.approved ? "Mapping approved" : "Approve & continue to Voice"}</button></aside></div>
+  const selected = currentScene();
+  const selectedNumber = String(selected.number).padStart(2, "0");
+  const previewRows = state.sceneState.items.map(scene => `<div class="validation-row script-map-row ${scene.id === selected.id ? "selected" : ""}" data-action="select-script-scene" data-scene-id="${escapeHtml(scene.id)}"><span class="${scene.narration ? "check" : "warning"}">${scene.narration ? "✓" : "▲"}</span><div><b>Scene ${String(scene.number).padStart(2, "0")}</b><span class="muted">${escapeHtml(scene.sourceFilename || "Source missing")} · Script ${scene.narration ? "mapped" : "missing"}</span>${scene.narration ? `<small class="muted">${escapeHtml(scene.narration.length > 96 ? `${scene.narration.slice(0, 96)}…` : scene.narration)}</small>` : ""}</div><span class="script-row-action">Edit</span></div>`).join("");
+  return `<section class="screen">${screenHeader("Script Mapping", "Select one scene, enter only that scene's narration, then save it. Each scene keeps an independent script.", `<button class="button" data-action="approve-script-mapping" ${allMapped && !state.scriptState.approved ? "" : "disabled"}>${state.scriptState.approved ? "Mapping approved" : "Approve mapping"}</button>`)}
+    <div class="script-layout"><section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Selected scene only</p><h2 class="card-title">Scene ${selectedNumber} narration</h2></div><span class="status-tag ${selected.narration ? "ready" : "pending"}">${selected.narration ? "Mapped" : "Missing"}</span></div><p class="caption scene-edit-notice">Changes here apply only to Scene ${selectedNumber}. Select another scene from the list or timeline to edit it separately.</p><label class="field-label" for="scene-script">Narration for Scene ${selectedNumber}</label><textarea id="scene-script" class="textarea-input scene-script-input" placeholder="Enter narration for Scene ${selectedNumber}…">${escapeHtml(selected.narration)}</textarea><div class="scene-script-actions"><span class="caption">Saving resets script approval so you can review the updated mapping.</span><button class="button" data-action="save-scene-script">Save Scene ${selectedNumber}</button></div><details class="bulk-script-panel"><summary>Optional: import a full multi-scene script</summary><p class="caption">Use explicit SCENE blocks. This is separate from the selected-scene editor above.</p><label class="field-label">Bulk format <small>SCENE 1 → Narration: → “text”</small></label><textarea id="bulk-script" class="textarea-input compact-textarea">${escapeHtml(state.scriptState.bulkText)}</textarea><div class="scene-script-actions"><span class="caption">Only scene numbers present in the text are updated.</span><button class="button-secondary" data-action="parse-script">Import scene blocks</button></div></details></section>
+      <aside class="card card-pad"><div class="card-head"><div><p class="eyebrow">Mapping review</p><h2 class="card-title">Choose a scene to edit</h2></div><span class="status-tag ${state.scriptState.approved ? "ready" : allMapped ? "review" : "pending"}">${state.scriptState.approved ? "Approved" : allMapped ? "Ready to approve" : `${state.scriptState.missing} missing`}</span></div>${previewRows}<button class="button-secondary" data-action="approve-script-mapping" ${allMapped && !state.scriptState.approved ? "" : "disabled"} style="margin-top:12px;width:100%">${state.scriptState.approved ? "Mapping approved" : "Approve & continue to Voice"}</button></aside></div>
   </section>`;
 }
 
@@ -523,6 +525,34 @@ function parseScript() {
   state.workflowState.previewReady = false;
   state.projectState.stage = "SCRIPT_MAPPING";
   toast(`${mapped} script block${mapped === 1 ? "" : "s"} mapped to dynamic scenes.`);
+  savePulse(); renderScreen();
+}
+
+async function saveSceneScript() {
+  const scene = currentScene();
+  const narration = $("#scene-script")?.value.trim() || "";
+  if (!scene || !narration) { toast("Enter narration for the selected scene first.", "warning"); return; }
+  const selectedId = scene.id;
+  if (backendOnline) {
+    try {
+      await apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/scenes/${encodeURIComponent(selectedId)}/script`, { method: "POST", body: JSON.stringify({ narration }) });
+      await loadBackendProject(state.projectState.id);
+      state.sceneState.selectedId = selectedId;
+      state.uiState.screen = "script";
+      renderScreen();
+      toast(`Scene ${String(scene.number).padStart(2, "0")} saved. Other scenes were not changed.`, "success");
+    } catch (error) { toast(error.message, "warning"); }
+    return;
+  }
+  scene.narration = narration;
+  state.scriptState.mapped = state.sceneState.items.filter(item => item.narration).length;
+  state.scriptState.missing = state.sceneState.items.length - state.scriptState.mapped;
+  state.scriptState.approved = false;
+  state.workflowState.scriptApproved = false;
+  state.workflowState.voiceApproved = false;
+  state.workflowState.previewReady = false;
+  state.projectState.stage = "SCRIPT_MAPPING";
+  toast(`Scene ${String(scene.number).padStart(2, "0")} saved. Other scenes were not changed.`, "success");
   savePulse(); renderScreen();
 }
 
@@ -808,6 +838,8 @@ document.addEventListener("click", event => {
     case "mock-import": case "choose-zip": mockImport(); break;
     case "choose-folder": chooseFolderPath(); break;
     case "parse-script": parseScript(); break;
+    case "select-script-scene": selectScene(target.dataset.sceneId); break;
+    case "save-scene-script": saveSceneScript(); break;
     case "approve-script-mapping": approveScriptMapping(); break;
     case "approve-voice": approveVoice(); break;
     case "approve-scene": if (!setBackendVideoStatus("approved")) { currentScene().status = "approved"; toast("Scene approved."); savePulse(); renderScreen(); } break;
