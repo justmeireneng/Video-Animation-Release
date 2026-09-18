@@ -700,7 +700,7 @@ async function generatePreview(previewScope = "quick") {
   voice.previewStatus = "GENERATING"; voice.previewUrl = null; voice.previewSceneId = sceneId; voice.playing = false; renderScreen();
   try {
     const result = await apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/voice/preview`, {
-      method: "POST", body: JSON.stringify({ scene_id: sceneId, preview_scope: previewScope, mode: voice.mode, language: voice.language, gender: voice.gender, age: voice.age, pitch: voice.pitch, speed: voice.speed }),
+      method: "POST", body: JSON.stringify({ scene_id: sceneId, text: narration, preview_scope: previewScope, mode: voice.mode, language: voice.language, gender: voice.gender, age: voice.age, pitch: voice.pitch, speed: voice.speed }),
     });
     voice.previewStatus = "GENERATED";
     voice.previewSceneId = result.scene_id || sceneId;
