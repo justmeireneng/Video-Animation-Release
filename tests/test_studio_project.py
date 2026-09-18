@@ -12,7 +12,7 @@ from src.services.script_service import ScriptService
 from src.services.studio_project import LocalProjectManager
 from src.services.render_service import RenderService
 from src.services.voice_service import VoiceConfig, VoiceService
-from src.studio_server import StudioApplication, run_server_in_thread
+from src.studio_server import StudioApplication, StudioHTTPServer, run_server_in_thread
 
 
 def fake_probe(_path: Path, _repo_root: Path):
@@ -108,6 +108,38 @@ class TestStudioProject(unittest.TestCase):
         self.assertEqual(narration_by_id["scene_02"], "Cảnh hai đã được chỉnh lại.")
         self.assertIn('SCENE 1\nNarration:\n"Lời thoại riêng của cảnh một."', detail["script_text"])
         self.assertIn('SCENE 2\nNarration:\n"Cảnh hai đã được chỉnh lại."', detail["script_text"])
+
+    def test_scene_script_route_updates_only_selected_scene(self):
+        self.manager.ensure_scene_slots(self.project_id, [1, 2])
+        app = StudioApplication(self.root)
+        app.update_scene_script(self.project_id, "scene_01", "Cảnh một giữ nguyên.")
+        ui_root = self.root / "ui"
+        ui_root.mkdir()
+        server, thread = run_server_in_thread(self.root, ui_root)
+        try:
+            url = f"http://127.0.0.1:{server.server_address[1]}/api/projects/{self.project_id}/scenes/scene_02/script"
+            request = Request(url, data=json.dumps({"narration": "Cảnh hai qua HTTP."}).encode("utf-8"),
+                              headers={"Content-Type": "application/json"}, method="POST")
+            with urlopen(request, timeout=5) as response:
+                self.assertEqual(response.status, 200)
+            scenes = app.project(self.project_id)["scenes"]
+            self.assertEqual([scene["narration"] for scene in scenes], ["Cảnh một giữ nguyên.", "Cảnh hai qua HTTP."])
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
+
+    def test_local_server_refuses_duplicate_port(self):
+        ui_root = self.root / "ui"
+        ui_root.mkdir()
+        server, thread = run_server_in_thread(self.root, ui_root)
+        try:
+            with self.assertRaises(OSError):
+                StudioHTTPServer(("127.0.0.1", server.server_address[1]), object)
+        finally:
+            server.shutdown()
+            thread.join(timeout=5)
+            server.server_close()
 
     def test_final_render_preflight_requires_preview_approval(self):
         self.manager.ensure_scene_slots(self.project_id, [1])

@@ -10,6 +10,7 @@ import json
 import hashlib
 import re
 import mimetypes
+import socket
 import threading
 import uuid
 from http import HTTPStatus
@@ -31,6 +32,16 @@ from src.video.scene_source_manager import SceneVideoStore
 
 PROJECT_ID = re.compile(r"^[A-Za-z0-9_-]{1,64}$")
 MAX_UPLOAD_BYTES = 8 * 1024 * 1024 * 1024
+
+
+class StudioHTTPServer(ThreadingHTTPServer):
+    """Prevent two local studio processes from serving different code on one port."""
+
+    def server_bind(self) -> None:
+        if hasattr(socket, "SO_EXCLUSIVEADDRUSE"):
+            self.allow_reuse_address = False
+            self.socket.setsockopt(socket.SOL_SOCKET, socket.SO_EXCLUSIVEADDRUSE, 1)
+        super().server_bind()
 
 
 class StudioApiError(ValueError):
@@ -801,7 +812,7 @@ def serve_studio(workspace_root: Path | str, ui_root: Path | str, host: str = "1
             super().__init__(*args, directory=directory, **kwargs)
 
     Handler.app = app
-    server = ThreadingHTTPServer((host, port), Handler)
+    server = StudioHTTPServer((host, port), Handler)
     print(f"AI Video Studio local server: http://{host}:{port}/")
     try:
         server.serve_forever()
@@ -822,7 +833,7 @@ def run_server_in_thread(workspace_root: Path | str, ui_root: Path | str) -> tup
             super().__init__(*args, directory=directory, **kwargs)
 
     Handler.app = app
-    server = ThreadingHTTPServer(("127.0.0.1", 0), Handler)
+    server = StudioHTTPServer(("127.0.0.1", 0), Handler)
     thread = threading.Thread(target=server.serve_forever, daemon=True)
     thread.start()
     return server, thread
