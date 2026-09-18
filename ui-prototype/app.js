@@ -442,6 +442,9 @@ function renderRender() {
   const isRendering = renderPollTimer !== null;
   const canRenderFinal = canRender && state.workflowState.previewApproved && !state.reviewState.dirty && !isRendering;
   const playableUrl = render.videoUrl || (state.workflowState.finalReady ? `${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/render/final?t=${Date.now()}` : hasPreview ? `${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/render/preview?t=${Date.now()}` : null);
+  if (isRendering) return `<section class="screen">${screenHeader("Render", "Video is being prepared locally. The screen stays still while progress updates.")}
+    <section class="card card-pad render-active-card" role="status" aria-live="polite"><p class="eyebrow">Render progress</p><div class="render-active-head"><h2 id="render-live-status">${escapeHtml(render.status)}</h2><span id="render-live-percent">${render.progress}%</span></div><div id="render-live-track" class="progress-track" role="progressbar" aria-label="Render progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="${render.progress}"><i id="render-live-bar" style="width:${render.progress}%"></i></div><p class="caption">${kept} scenes · ${render.quality === "final" ? "Final" : "Preview"} render. The video player will appear when the file is ready.</p></section>
+  </section>`;
   return `<section class="screen">${screenHeader("Render", canRender ? "Create a preview with local OmniVoice narration. Watch and approve it before rendering the final video." : "Rendering is locked until you approve scene-by-scene script mapping and manual voice settings.", `<button class="button-quiet" data-nav="${hasPreview ? "scenes" : !state.workflowState.scriptApproved ? "script" : "voice"}">${hasPreview ? "Open Final Review" : !state.workflowState.scriptApproved ? "Review Script" : "Review Voice"}</button><button class="button-secondary" data-action="start-render" data-quality="preview" ${canRender && !isRendering ? "" : "disabled"}>Render Preview</button><button class="button" data-action="start-render" data-quality="final" ${canRenderFinal ? "" : "disabled"}>Render Final</button>`)}
     <div class="render-layout"><section class="card card-pad"><p class="eyebrow">Review player</p>${playableUrl ? `<video controls preload="metadata" style="display:block;max-height:480px;max-width:100%;margin:12px auto" src="${playableUrl}"></video>` : `<div class="video-player" data-project-title="${escapeHtml(activeProject().name)}"><span class="player-play">▶</span></div>`}<div style="display:flex;justify-content:space-between;margin-top:12px"><span class="caption">${kept} scenes · ${formatTime(projectDuration())} · ${activeProject().aspect} · ${activeProject().fps}fps · H.264</span><div><button class="button-secondary" data-nav="scenes" ${hasPreview ? "" : "disabled"}>Basic edits</button>${state.workflowState.finalReady ? `<a class="button-secondary" href="${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/render/final" download="${escapeHtml(state.projectState.id)}-final.mp4">Download final MP4</a>` : `<button class="button-quiet" data-action="approve-export" ${hasPreview && !state.reviewState.dirty && !state.workflowState.previewApproved ? "" : "disabled"}>${state.workflowState.previewApproved ? "Preview approved" : "Approve preview"}</button>`}</div></div></section><section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Render progress</p><h2 class="card-title">${escapeHtml(render.status)}</h2></div><span class="caption">${render.progress}%</span></div><label class="field-label" style="margin:12px 0 6px">OmniVoice quality for next preview</label><select class="select-input" data-setting="render-voice-steps" ${isRendering ? "disabled" : ""}><option value="4" ${render.voiceSteps === 4 ? "selected" : ""}>Fast · 4 steps</option><option value="8" ${render.voiceSteps === 8 ? "selected" : ""}>Balanced · 8 steps</option><option value="16" ${render.voiceSteps === 16 ? "selected" : ""}>Detailed · 16 steps</option></select><p class="caption" style="margin:6px 0 12px">Final render reuses the narration you approved in the preview.</p><div class="progress-track"><i style="width:${render.progress}%"></i></div>${render.error ? `<p class="warning" style="margin-top:12px">${escapeHtml(render.error)}</p>` : ""}<div class="progress-steps">${steps.map((step, index) => `<div class="progress-step ${index < render.activeStep ? "done" : index === render.activeStep ? "active" : ""}"><span class="progress-dot">${index < render.activeStep ? "✓" : index + 1}</span><div><b>${step}</b><span>${index < render.activeStep ? "Done" : index === render.activeStep ? "Working…" : "Waiting"}</span></div><span class="tiny subtle">${index === 1 ? "Voice" : index === 4 ? "Remotion" : index === 5 ? "FFmpeg" : ""}</span></div>`).join("")}</div></section></div>
     <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Request changes</p><h2 class="card-title">Send a precise revision back through the project</h2></div></div><div class="form-row three"><div><label class="field-label">Scene</label><select class="select-input" data-setting="request-scene">${optionList(state.sceneState.items.map(scene => ({ id: scene.id, label: `Scene ${String(scene.number).padStart(2, "0")} · ${scene.title}` })), render.requestScene)}</select></div><div><label class="field-label">Change type</label><select class="select-input" data-setting="request-category">${optionList(["Source", "Trim", "Speed", "Crop", "Audio", "Transition", "Subtitle", "Voice Timing", "Voice Override"], render.requestCategory)}</select></div><div><label class="field-label">Action</label><button class="button-secondary" style="width:100%" data-action="apply-changes">Apply Changes</button></div></div><textarea id="change-comment" class="textarea-input compact-textarea" style="margin-top:10px" placeholder="Describe the correction for this scene…"></textarea></section>
@@ -731,6 +734,20 @@ function applyRenderStatus(job) {
   if (job.video_url) render.videoUrl = `${job.video_url}?t=${Date.now()}`;
 }
 
+function updateRenderProgress() {
+  if (state.uiState.screen !== "render") return;
+  const status = $("#render-live-status");
+  const percent = $("#render-live-percent");
+  const track = $("#render-live-track");
+  const bar = $("#render-live-bar");
+  if (!status || !percent || !track || !bar) { renderScreen(); return; }
+  const progress = Math.max(0, Math.min(100, state.renderState.progress));
+  if (status.textContent !== state.renderState.status) status.textContent = state.renderState.status;
+  if (percent.textContent !== `${progress}%`) percent.textContent = `${progress}%`;
+  if (bar.style.width !== `${progress}%`) bar.style.width = `${progress}%`;
+  track.setAttribute("aria-valuenow", String(progress));
+}
+
 function watchRenderStatus() {
   if (renderPollTimer) clearInterval(renderPollTimer);
   const projectId = state.projectState.id;
@@ -738,12 +755,13 @@ function watchRenderStatus() {
     try {
       const job = await apiRequest(`/projects/${encodeURIComponent(projectId)}/render/status`);
       if (state.projectState.id !== projectId) { clearInterval(renderPollTimer); renderPollTimer = null; return; }
-      if (job.status === "running") { applyRenderStatus(job); if (state.uiState.screen === "render") renderScreen(); return; }
+      if (job.status === "running") { applyRenderStatus(job); updateRenderProgress(); return; }
       clearInterval(renderPollTimer); renderPollTimer = null;
       if (job.status === "complete") {
         await loadBackendProject(projectId);
         state.reviewState.dirty = false;
         toast(`${job.quality === "final" ? "Final" : "Preview"} video is ready. Watch it before approving.`, "success");
+        return;
       } else if (job.status === "failed") {
         applyRenderStatus(job);
         toast(job.error || "Render failed. Check the local runtime.", "warning");
