@@ -185,6 +185,16 @@ class VoiceService:
         return hashlib.sha256(canonical.encode("utf-8")).hexdigest()
 
     def synthesize(self, text: str, config: VoiceConfig, output_path: Path | str) -> VoiceSynthesisResult:
+        output = Path(output_path)
+        output.parent.mkdir(parents=True, exist_ok=True)
+        if not self.fallback:
+            # Strict local projects can reuse approved cached audio even when
+            # memory is currently too low to start OmniVoice again.
+            self.registry.get(config.provider)  # Still reject providers excluded from the active registry.
+            requested_key = self.cache_key(text, config, selected_provider=config.provider)
+            cached = self._cached_result(requested_key, output)
+            if cached is not None:
+                return cached
         if config.provider not in self._resolutions:
             self._resolutions[config.provider] = self.registry.resolve(config.provider, fallback=self.fallback)
         resolution = self._resolutions[config.provider]
@@ -193,15 +203,9 @@ class VoiceService:
         self.cache_root.mkdir(parents=True, exist_ok=True)
         cached_audio = self.cache_root / f"{key}.wav"
         cached_metadata = self.cache_root / f"{key}.json"
-        output = Path(output_path)
-        output.parent.mkdir(parents=True, exist_ok=True)
-        if cached_audio.is_file() and cached_metadata.is_file():
-            if output.resolve() != cached_audio.resolve():
-                shutil.copy2(cached_audio, output)
-            metadata = json.loads(cached_metadata.read_text(encoding="utf-8"))
-            metadata.update({"audio_file": output, "cache_hit": True})
-            self.last_metrics = {"cache_hit": True}
-            return VoiceSynthesisResult(**metadata)
+        cached = self._cached_result(key, output)
+        if cached is not None:
+            return cached
 
         temp_audio = self.cache_root / f"{key}.generating.wav"
         rate = str(config.options.get("rate") or _speed_to_rate(config.speed))
@@ -231,6 +235,18 @@ class VoiceService:
         metadata["cache_hit"] = False
         cached_metadata.write_text(json.dumps(metadata, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         return result
+
+    def _cached_result(self, key: str, output: Path) -> VoiceSynthesisResult | None:
+        cached_audio = self.cache_root / f"{key}.wav"
+        cached_metadata = self.cache_root / f"{key}.json"
+        if not (cached_audio.is_file() and cached_metadata.is_file()):
+            return None
+        if output.resolve() != cached_audio.resolve():
+            shutil.copy2(cached_audio, output)
+        metadata = json.loads(cached_metadata.read_text(encoding="utf-8"))
+        metadata.update({"audio_file": output, "cache_hit": True})
+        self.last_metrics = {"cache_hit": True}
+        return VoiceSynthesisResult(**metadata)
 
     def generate_voice_preview(
         self,

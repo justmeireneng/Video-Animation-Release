@@ -32,13 +32,25 @@ send projects or source media to a cloud service.
    An original source file is never overwritten.
 4. Paste or import the per-scene script, then approve its mapping. The text is
    stored as supplied; it is not rewritten by an AI service.
-5. Configure and preview the voice, approve it, prepare narration/subtitles,
-   render a preview, review it, and approve that preview before final render.
-   The render preflight rejects a new project with an unapproved video, script,
-   voice or missing narration audio.
-6. Make source trim, crop, source-audio, 0.50–2.00x video-speed, hold-last-
-   frame and transition adjustments non-destructively, then render a new
-   preview before final export.
+5. Configure and preview OmniVoice, then approve it. `Render Preview` prepares
+   full scene narration and Vietnamese subtitle timing in a background job,
+   then renders the actual local MP4 with Remotion. The progress panel reports
+   each stage or a real error; it does not produce a mock video. The render
+   preflight rejects unapproved source videos, scripts or voices. No cloud
+   voice fallback is used for desktop projects. For the 4-thread/8 GB target,
+   the default is Fast (4 decoding steps); Balanced (8) and Detailed (16) are
+   available before a new preview. The final render reuses the narration heard
+   in the approved preview instead of generating it again. OmniVoice releases
+   its model memory before Remotion starts.
+   Review MP4s render at 432×768 with one Remotion worker; final MP4s use the
+   project resolution.
+6. Watch the preview in Final Review. Keep or cut scenes and make trim, crop,
+   source-audio, 0.50–2.00x video-speed, hold-last-frame and transition edits
+   non-destructively. These decisions are saved per project; cut scenes are
+   excluded from the next render and are skipped during narration regeneration.
+   After edits, render an updated preview and
+   approve it. Only then does `Render Final` become available. The final MP4
+   can be played or downloaded from the Render screen.
 
 ## Useful CLI commands
 

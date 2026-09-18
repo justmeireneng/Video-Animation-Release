@@ -137,7 +137,7 @@ class TestVoiceProviders(unittest.TestCase):
             self.assertIn("reuse", health["detail"])
             self.assertEqual(health["memory"]["free_physical_gb"], 0.5)
 
-    def test_omnivoice_health_blocks_only_when_commit_headroom_is_exhausted(self):
+    def test_omnivoice_health_blocks_when_commit_headroom_is_exhausted(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)
             runtime, runner, model = root / "python.exe", root / "runner.py", root / "model"
@@ -151,6 +151,21 @@ class TestVoiceProviders(unittest.TestCase):
                 health = provider.health_check()
             self.assertFalse(health["ready_for_generation"])
             self.assertEqual(health["status"], "memory_exhausted")
+
+    def test_omnivoice_health_blocks_critically_low_physical_ram(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            runtime, runner, model = root / "python.exe", root / "runner.py", root / "model"
+            runtime.write_bytes(b"")
+            runner.write_text("", encoding="utf-8")
+            (model / "audio_tokenizer").mkdir(parents=True)
+            (model / "model.safetensors").write_bytes(b"model")
+            (model / "audio_tokenizer" / "model.safetensors").write_bytes(b"tokenizer")
+            provider = OmniVoiceProvider(runtime_python=runtime, runner_path=runner, model_path=model)
+            with patch("src.providers.voice.omnivoice._memory_headroom", return_value={"physical": 128 * 1024**2, "commit": 3 * 1024**3}):
+                health = provider.health_check()
+            self.assertFalse(health["ready_for_generation"])
+            self.assertIn("free RAM", health["detail"])
 
     def test_default_registry_exposes_only_omnivoice(self):
         providers = ProviderRegistry().catalog()
@@ -182,6 +197,20 @@ class TestVoiceProviders(unittest.TestCase):
             self.assertTrue(Path(preview.audio_file).is_file())
             self.assertFalse((root / "output" / "preview.mp4").exists())
 
+    def test_strict_local_cache_works_without_loading_provider_again(self):
+        fake = FakeProvider()
+        registry = ProviderRegistry({"fake": lambda: fake})
+        config = VoiceConfig(provider="fake", speed=1.1, options={"num_step": 4})
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp)
+            first = VoiceService(root, registry=registry, fallback=False).synthesize("Nội dung đã tạo", config, root / "first.wav")
+            with patch.object(registry, "resolve", side_effect=AssertionError("Model must not load on cache hit")):
+                second = VoiceService(root, registry=registry, fallback=False).synthesize("Nội dung đã tạo", config, root / "second.wav")
+            self.assertFalse(first.cache_hit)
+            self.assertTrue(second.cache_hit)
+            self.assertEqual(fake.calls, 1)
+            self.assertEqual((root / "first.wav").read_bytes(), (root / "second.wav").read_bytes())
+
     def test_omnivoice_cache_key_tracks_active_voice_inputs(self):
         service = VoiceService(Path(tempfile.gettempdir()), fallback=False)
         base = VoiceConfig(
@@ -201,6 +230,9 @@ class TestVoiceProviders(unittest.TestCase):
         for variant in variants:
             self.assertNotEqual(service.cache_key("Nội dung", base), service.cache_key("Nội dung", variant))
         self.assertNotEqual(service.cache_key("Nội dung", base), service.cache_key("Nội dung khác", base))
+        detailed = VoiceConfig(provider="omnivoice", mode="voice_design", language="vi", speed=1.10,
+                               design={"gender": "male", "pitch": "moderate"}, options={"num_step": 16})
+        self.assertNotEqual(service.cache_key("Nội dung", base), service.cache_key("Nội dung", detailed))
 
     def test_invalid_provider_falls_back_with_clear_warning(self):
         registry = ProviderRegistry({"omnivoice": FakeProvider})

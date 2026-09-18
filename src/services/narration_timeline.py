@@ -5,7 +5,7 @@ import math
 import re
 import subprocess
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 from src.providers.base import wav_metadata
 from src.services.voice_service import VoiceConfig, VoiceService
@@ -89,7 +89,9 @@ class NarrationTimelineService:
             cursor = end
         return result
 
-    def prepare(self, *, synthesize: bool = True) -> dict[str, Any]:
+    def prepare(self, *, synthesize: bool = True, num_step: int | None = None,
+                on_scene: Callable[[int, int, str], None] | None = None,
+                included_scene_ids: set[str] | None = None) -> dict[str, Any]:
         existing_project = json.loads(self.remotion_path.read_text(encoding="utf-8")) if self.remotion_path.is_file() else {}
         if self.source_path.is_file():
             # Legacy narration.json remains supported for established projects.
@@ -118,14 +120,30 @@ class NarrationTimelineService:
         audio_root = self.project_root / ("voice/narration" if is_desktop_project else "audio")
         audio_root.mkdir(parents=True, exist_ok=True)
         voice_config = VoiceConfig.from_project(source)
+        if num_step is not None:
+            if num_step not in {4, 8, 16}:
+                raise ValueError("OmniVoice narration quality must use 4, 8 or 16 steps.")
+            voice_config.options = {**voice_config.options, "num_step": num_step}
         if synthesize and voice_config.approval_required and not voice_config.approved:
             raise RuntimeError("Voice selection is awaiting approval; narration was not regenerated.")
-        voice_service = VoiceService(self.project_root)
+        # Desktop projects may use only the explicitly selected local provider.
+        # Never replace a failed OmniVoice render with a cloud or mock voice.
+        voice_service = VoiceService(self.project_root, fallback=not is_desktop_project)
         scenes: list[dict[str, Any]] = []
         report: list[dict[str, Any]] = []
         transitions = ["crossfade", "soft_slide", "crossfade", "paper"]
+        selected_total = sum(included_scene_ids is None or str(item["id"]) in included_scene_ids for item in source["scenes"])
+        selected_index = 0
         for index, item in enumerate(source["scenes"], 1):
             scene_id = str(item["id"])
+            if included_scene_ids is not None and scene_id not in included_scene_ids:
+                if scene_id not in existing_scenes:
+                    raise ValueError(f"Cannot skip unknown scene {scene_id} during narration preparation.")
+                scenes.append(dict(existing_scenes[scene_id]))
+                continue
+            selected_index += 1
+            if on_scene:
+                on_scene(selected_index, selected_total, scene_id)
             output = audio_root / f"{scene_id}.wav"
             synthesis_result = None
             if synthesize or not output.is_file():
@@ -167,6 +185,8 @@ class NarrationTimelineService:
                     "cache_hit": True,
                 },
             })
+            if on_scene:
+                on_scene(selected_index + 1, selected_total, scene_id)
         project = dict(existing_project)
         project.update({
             "name": source.get("title", project.get("name", self.project_name)),

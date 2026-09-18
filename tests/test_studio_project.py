@@ -1,5 +1,6 @@
 import json
 import tempfile
+import time
 import unittest
 from urllib.request import Request, urlopen
 from pathlib import Path
@@ -10,6 +11,7 @@ from src.services.import_service import ImportService
 from src.services.script_service import ScriptService
 from src.services.studio_project import LocalProjectManager
 from src.services.render_service import RenderService
+from src.services.voice_service import VoiceConfig, VoiceService
 from src.studio_server import StudioApplication, run_server_in_thread
 
 
@@ -110,6 +112,146 @@ class TestStudioProject(unittest.TestCase):
         self.assertEqual(renderer._preflight(final=False)["id"], self.project_id)
         with self.assertRaisesRegex(RuntimeError, "preview approval"):
             renderer._preflight(final=True)
+
+    def test_local_render_api_prepares_narration_then_preview_and_requires_review_for_final(self):
+        self.manager.ensure_scene_slots(self.project_id, [1])
+        manifest = self.manager.load(self.project_id)
+        manifest["script"]["approved"] = True
+        manifest["voice"]["approved"] = True
+        self.manager.save(self.project_id, manifest)
+        remotion_path = self.project / "remotion.json"
+        remotion = json.loads(remotion_path.read_text(encoding="utf-8"))
+        remotion["scenes"][0]["narration"] = "Một cảnh thử."
+        remotion_path.write_text(json.dumps(remotion), encoding="utf-8")
+        metadata = self.project / "scenes" / "scene_01" / "metadata.json"
+        metadata.parent.mkdir(parents=True, exist_ok=True)
+        metadata.write_text('{"approved_version": 1}', encoding="utf-8")
+        app = StudioApplication(self.root)
+        with self.assertRaisesRegex(Exception, "preview approval"):
+            app.start_render(self.project_id, "final")
+        with self.assertRaisesRegex(Exception, "Voice quality"):
+            app.start_render(self.project_id, "preview", voice_steps=3)
+
+        prepared = []
+
+        def prepare(_service, *, synthesize=True, num_step=None, on_scene=None, included_scene_ids=None):
+            self.assertEqual(num_step, 4)
+            self.assertEqual(included_scene_ids, {"scene_01"})
+            prepared.append(num_step)
+            if on_scene:
+                on_scene(1, 1, "scene_01")
+            audio = self.project / "voice" / "narration" / "scene_01.wav"
+            audio.write_bytes(b"RIFF-test-audio")
+            return {"scenes": [{"scene_id": "scene_01"}]}
+
+        def render(_renderer, _name, output, *, preview):
+            output.parent.mkdir(parents=True, exist_ok=True)
+            output.write_bytes(b"fake-mp4")
+            return output
+
+        def finalize(_finalizer, _source, output):
+            output.write_bytes(b"fake-final-mp4")
+            return output
+
+        with patch("src.studio_server.NarrationTimelineService.prepare", autospec=True, side_effect=prepare), \
+             patch.object(app, "_validate_voice_capacity"), \
+             patch("src.services.render_service.RemotionRenderer.render", autospec=True, side_effect=render), \
+             patch("src.services.render_service.FFmpegFinalizer.finalize", autospec=True, side_effect=finalize):
+            app.start_render(self.project_id, "preview")
+            deadline = time.monotonic() + 5
+            while app.render_status(self.project_id)["status"] == "running" and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertEqual(app.render_status(self.project_id)["status"], "complete")
+            self.assertTrue(app.render_media_path(self.project_id, "preview").is_file())
+            app.approve_render_preview(self.project_id)
+            app.start_render(self.project_id, "final")
+            deadline = time.monotonic() + 5
+            while app.render_status(self.project_id)["status"] == "running" and time.monotonic() < deadline:
+                time.sleep(0.01)
+            self.assertEqual(app.render_status(self.project_id)["status"], "complete")
+            self.assertTrue(app.render_media_path(self.project_id, "final").is_file())
+            self.assertEqual(prepared, [4], "Final render must reuse approved narration audio")
+            self.assertEqual(StudioApplication(self.root).render_status(self.project_id)["status"], "complete")
+            ui_root = self.root / "ui"
+            ui_root.mkdir()
+            server, thread = run_server_in_thread(self.root, ui_root)
+            server.RequestHandlerClass.app = app
+            try:
+                base = f"http://127.0.0.1:{server.server_address[1]}/api/projects/{self.project_id}/render"
+                with urlopen(f"{base}/status", timeout=5) as response:
+                    self.assertEqual(json.load(response)["status"], "complete")
+                with urlopen(Request(f"{base}/final", headers={"Range": "bytes=0-3"}), timeout=5) as response:
+                    self.assertEqual(response.status, 206)
+                    self.assertEqual(response.read(), b"fake")
+            finally:
+                server.shutdown()
+                thread.join(timeout=5)
+                server.server_close()
+
+    def test_cut_decision_is_saved_and_excluded_from_render_config(self):
+        self.manager.ensure_scene_slots(self.project_id, [1, 2])
+        manifest = self.manager.load(self.project_id)
+        manifest["script"]["approved"] = True
+        manifest["voice"]["approved"] = True
+        manifest["render"]["preview_ready"] = True
+        self.manager.save(self.project_id, manifest)
+        remotion_path = self.project / "remotion.json"
+        remotion = json.loads(remotion_path.read_text(encoding="utf-8"))
+        remotion["scenes"][0]["narration"] = "Giữ cảnh một."
+        remotion["scenes"][1]["narration"] = "Cắt cảnh hai."
+        remotion_path.write_text(json.dumps(remotion), encoding="utf-8")
+        metadata = self.project / "scenes" / "scene_01" / "metadata.json"
+        metadata.parent.mkdir(parents=True, exist_ok=True)
+        metadata.write_text('{"approved_version": 1}', encoding="utf-8")
+        app = StudioApplication(self.root)
+        updated = app.set_scene_decisions(self.project_id, {"scene_02": "cut"})
+        self.assertTrue(updated["render"]["review_dirty"])
+        self.assertFalse(updated["render"]["preview_approved"])
+        renderer = RenderService(self.root, self.project_id)
+        renderer._prepare_render_config(renderer._preflight(final=False, require_audio=False))
+        render_config = json.loads((self.project / "render" / "render-remotion.json").read_text(encoding="utf-8"))
+        self.assertEqual([scene["id"] for scene in render_config["scenes"]], ["scene_01"])
+        with self.assertRaisesRegex(Exception, "Keep at least one scene"):
+            app.set_scene_decisions(self.project_id, {"scene_01": "cut"})
+
+    def test_render_status_reports_interrupted_job_after_server_restart(self):
+        status_file = self.project / "metadata" / "render-job.json"
+        status_file.write_text(json.dumps({"status": "running", "quality": "preview", "step": 1,
+                                          "progress": 12, "detail": "OmniVoice", "error": None}), encoding="utf-8")
+        status = StudioApplication(self.root).render_status(self.project_id)
+        self.assertEqual(status["status"], "failed")
+        self.assertIn("stopped", status["error"])
+
+    def test_project_edits_are_blocked_while_a_render_is_running(self):
+        app = StudioApplication(self.root)
+        app._render_jobs[self.project_id] = {"status": "running"}
+        with self.assertRaisesRegex(Exception, "Wait for the current render"):
+            app.save_script(self.project_id, "SCENE 1\nNarration:\n\"Changed\"")
+
+    def test_render_voice_capacity_allows_cache_without_loading_model(self):
+        self.manager.ensure_scene_slots(self.project_id, [1])
+        remotion_path = self.project / "remotion.json"
+        remotion = json.loads(remotion_path.read_text(encoding="utf-8"))
+        remotion["scenes"][0]["narration"] = "Cached narration."
+        remotion_path.write_text(json.dumps(remotion), encoding="utf-8")
+        app = StudioApplication(self.root)
+        unavailable = type("Unavailable", (), {"health_check": lambda self: {
+            "ready_for_generation": False, "detail": "memory full",
+        }})()
+        with patch("src.studio_server.ProviderRegistry.get", return_value=unavailable):
+            with self.assertRaisesRegex(Exception, "scene_01.*memory full"):
+                app._validate_voice_capacity(self.project_id, 4)
+
+        manifest = self.manager.load(self.project_id)
+        config = VoiceConfig.from_project(manifest)
+        config.options = {**config.options, "num_step": 4}
+        service = VoiceService(self.project, fallback=False)
+        key = service.cache_key("Cached narration.", config, selected_provider=config.provider)
+        service.cache_root.mkdir(parents=True, exist_ok=True)
+        (service.cache_root / f"{key}.wav").write_bytes(b"RIFF-cache")
+        (service.cache_root / f"{key}.json").write_text("{}", encoding="utf-8")
+        with patch("src.studio_server.ProviderRegistry.get", side_effect=AssertionError("Health must not run")):
+            app._validate_voice_capacity(self.project_id, 4)
 
     def test_local_server_lists_real_projects_and_never_uses_mock_seeds(self):
         app = StudioApplication(self.root)

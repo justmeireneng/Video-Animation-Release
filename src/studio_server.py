@@ -18,8 +18,11 @@ from pathlib import Path
 from typing import Any
 from urllib.parse import unquote, urlparse
 
+from src.providers.voice.omnivoice import OmniVoiceProvider
 from src.providers.voice.registry import ProviderRegistry
 from src.services.import_service import ImportService
+from src.services.narration_timeline import NarrationTimelineService
+from src.services.render_service import RenderService
 from src.services.script_service import ScriptService
 from src.services.studio_project import LocalProjectManager
 from src.services.voice_service import VoiceConfig, VoiceService
@@ -43,6 +46,8 @@ class StudioApplication:
         self.workspace_root = Path(workspace_root).resolve()
         self.projects_root = self.workspace_root / "projects"
         self.manager = LocalProjectManager(self.workspace_root)
+        self._render_lock = threading.Lock()
+        self._render_jobs: dict[str, dict[str, Any]] = {}
 
     @staticmethod
     def _project_id(value: str) -> str:
@@ -56,6 +61,12 @@ class StudioApplication:
         if not root.is_dir():
             raise StudioApiError("Project not found.", HTTPStatus.NOT_FOUND)
         return root
+
+    def _ensure_render_idle(self, project_id: str) -> None:
+        with self._render_lock:
+            job = self._render_jobs.get(project_id)
+            if job and job["status"] == "running":
+                raise StudioApiError("Wait for the current render before changing this project.", HTTPStatus.CONFLICT)
 
     @staticmethod
     def _read_json(path: Path, fallback: dict[str, Any] | None = None) -> dict[str, Any]:
@@ -142,13 +153,17 @@ class StudioApplication:
         return self.project(str(manifest["id"]))
 
     def import_path(self, project_id: str, value: str) -> dict[str, Any]:
+        self._ensure_render_idle(project_id)
         path = Path(value).expanduser().resolve()
         service = ImportService(self.workspace_root, self._project_id(project_id))
         if path.is_file() and path.suffix.lower() == ".zip":
-            return service.import_zip(path)
-        if path.is_dir():
-            return service.import_folder(path)
-        raise StudioApiError("Choose a readable ZIP archive or a source folder.")
+            result = service.import_zip(path)
+        elif path.is_dir():
+            result = service.import_folder(path)
+        else:
+            raise StudioApiError("Choose a readable ZIP archive or a source folder.")
+        self._mark_render_dirty(project_id)
+        return result
 
     def import_zip_upload(self, project_id: str, filename: str, content: bytes) -> dict[str, Any]:
         if not filename.lower().endswith(".zip"):
@@ -167,6 +182,7 @@ class StudioApplication:
     def import_uploaded_zip_file(self, project_id: str, filename: str, temporary: Path) -> dict[str, Any]:
         """Atomically store a streamed ZIP upload before validating/importing it."""
 
+        self._ensure_render_idle(project_id)
         if not filename.lower().endswith(".zip"):
             raise StudioApiError("Only a .zip source archive can be uploaded here.")
         root = self._project_root(project_id)
@@ -189,12 +205,17 @@ class StudioApplication:
             target = target.with_name(f"{target.stem}-{suffix}{target.suffix}")
             suffix += 1
         temporary.replace(target)
-        return ImportService(self.workspace_root, self._project_id(project_id)).import_zip(target)
+        result = ImportService(self.workspace_root, self._project_id(project_id)).import_zip(target)
+        self._mark_render_dirty(project_id)
+        return result
 
     def save_script(self, project_id: str, text: str) -> dict[str, Any]:
+        self._ensure_render_idle(project_id)
         if not isinstance(text, str):
             raise StudioApiError("Script text must be a string.")
-        return ScriptService(self.workspace_root, self._project_id(project_id)).save_bulk(text)
+        result = ScriptService(self.workspace_root, self._project_id(project_id)).save_bulk(text)
+        self._mark_render_dirty(project_id)
+        return result
 
     def approve_script(self, project_id: str) -> dict[str, Any]:
         try:
@@ -203,12 +224,16 @@ class StudioApplication:
             raise StudioApiError(str(exc), HTTPStatus.CONFLICT) from exc
 
     def set_video_status(self, project_id: str, scene_id: str, version: int, status: str) -> dict[str, Any]:
+        self._ensure_render_idle(project_id)
         store = SceneVideoStore(self.workspace_root, self._project_id(project_id))
         if status == "approved":
-            return store.approve(scene_id, version)
-        if status == "rejected":
-            return store.reject(scene_id, version)
-        raise StudioApiError("Video status must be approved or rejected.")
+            result = store.approve(scene_id, version)
+        elif status == "rejected":
+            result = store.reject(scene_id, version)
+        else:
+            raise StudioApiError("Video status must be approved or rejected.")
+        self._mark_render_dirty(project_id)
+        return result
 
     def source_video_path(self, project_id: str, scene_id: str) -> Path:
         root = self._project_root(project_id)
@@ -226,6 +251,7 @@ class StudioApplication:
     def update_voice(self, project_id: str, request: dict[str, Any]) -> dict[str, Any]:
         """Persist only controls that the active provider actually reports."""
 
+        self._ensure_render_idle(project_id)
         identifier = self._project_id(project_id)
         manifest = self.manager.load(identifier)
         provider = ProviderRegistry().get("omnivoice")
@@ -256,6 +282,9 @@ class StudioApplication:
             "language": str(request.get("language", "vi")), "design": design,
             "speed": round(speed, 2), "approved": False, "selected_preview": None, "preview_file": None,
         }
+        if (manifest.get("render") or {}).get("preview_ready"):
+            manifest["render"] = {**dict(manifest.get("render") or {}), "review_dirty": True,
+                                  "preview_approved": False, "final_ready": False}
         return self.manager.save(identifier, manifest)
 
     def generate_voice_preview(self, project_id: str, request: dict[str, Any]) -> dict[str, Any]:
@@ -333,25 +362,207 @@ class StudioApplication:
     def edit_video(self, project_id: str, scene_id: str, request: dict[str, Any]) -> dict[str, Any]:
         """Apply one non-destructive edit to an imported source version."""
 
+        self._ensure_render_idle(project_id)
         store = SceneVideoStore(self.workspace_root, self._project_id(project_id))
         version = int(request.get("version", 0))
         action = str(request.get("action", ""))
         if action == "speed":
-            return store.set_playback_speed(scene_id, version, float(request.get("speed")))
-        if action == "hold_last_frame":
-            return store.set_hold_last_frame(scene_id, version, bool(request.get("enabled")))
-        if action == "trim":
-            return store.set_trim(scene_id, version, float(request.get("start")), float(request.get("end")))
-        if action == "crop":
-            return store.set_crop(scene_id, version, float(request.get("x", 0.5)), float(request.get("y", 0.5)), str(request.get("mode", "cover")))
-        if action == "source_audio":
-            return store.set_source_audio(
+            result = store.set_playback_speed(scene_id, version, float(request.get("speed")))
+        elif action == "hold_last_frame":
+            result = store.set_hold_last_frame(scene_id, version, bool(request.get("enabled")))
+        elif action == "trim":
+            result = store.set_trim(scene_id, version, float(request.get("start")), float(request.get("end")))
+        elif action == "crop":
+            result = store.set_crop(scene_id, version, float(request.get("x", 0.5)), float(request.get("y", 0.5)), str(request.get("mode", "cover")))
+        elif action == "source_audio":
+            result = store.set_source_audio(
                 scene_id, version, str(request.get("mode", "mute")), request.get("volume"), request.get("duck"),
                 request.get("fade_in"), request.get("fade_out"),
             )
-        if action == "transition":
-            return store.set_transition(scene_id, str(request.get("transition", "none")))
-        raise StudioApiError("Unsupported video edit.")
+        elif action == "transition":
+            result = store.set_transition(scene_id, str(request.get("transition", "none")))
+        else:
+            raise StudioApiError("Unsupported video edit.")
+        self._mark_render_dirty(project_id)
+        return result
+
+    def _mark_render_dirty(self, project_id: str) -> None:
+        if not (self._project_root(project_id) / "project.json").is_file():
+            return
+        manifest = self.manager.load(project_id)
+        render = dict(manifest.get("render") or {})
+        if render.get("preview_ready"):
+            render.update({"review_dirty": True, "preview_approved": False, "final_ready": False})
+            manifest["render"] = render
+            self.manager.save(project_id, manifest)
+
+    def set_scene_decisions(self, project_id: str, decisions: dict[str, str]) -> dict[str, Any]:
+        self._ensure_render_idle(project_id)
+        root = self._project_root(project_id)
+        manifest = self.manager.load(project_id)
+        if not (manifest.get("render") or {}).get("preview_ready"):
+            raise StudioApiError("Render a preview before deciding which scenes to keep or cut.", HTTPStatus.CONFLICT)
+        scenes = self._read_json(root / "remotion.json").get("scenes") or []
+        known = {str(scene.get("id")) for scene in scenes}
+        if not isinstance(decisions, dict) or not decisions or any(scene_id not in known or value not in {"keep", "cut"} for scene_id, value in decisions.items()):
+            raise StudioApiError("Scene decisions must name existing scenes and use keep or cut.")
+        updated = dict((manifest.get("render") or {}).get("scene_decisions") or {})
+        updated.update(decisions)
+        if not any(updated.get(scene_id) != "cut" for scene_id in known):
+            raise StudioApiError("Keep at least one scene for rendering.", HTTPStatus.CONFLICT)
+        render = dict(manifest.get("render") or {})
+        if updated != render.get("scene_decisions", {}):
+            render.update({"scene_decisions": updated, "review_dirty": True,
+                           "preview_approved": False, "final_ready": False})
+            manifest["render"] = render
+            return self.manager.save(project_id, manifest)
+        return manifest
+
+    def _validate_voice_capacity(self, project_id: str, voice_steps: int) -> None:
+        root = self._project_root(project_id)
+        manifest = self.manager.load(project_id)
+        decisions = (manifest.get("render") or {}).get("scene_decisions") or {}
+        config = VoiceConfig.from_project(manifest)
+        config.options = {**config.options, "num_step": voice_steps}
+        service = VoiceService(root, fallback=False)
+        uncached = []
+        for scene in self._read_json(root / "remotion.json").get("scenes", []):
+            if decisions.get(scene.get("id")) == "cut":
+                continue
+            key = service.cache_key(str(scene.get("narration", "")), config, selected_provider=config.provider)
+            if not ((service.cache_root / f"{key}.wav").is_file() and (service.cache_root / f"{key}.json").is_file()):
+                uncached.append(str(scene.get("id")))
+        if uncached:
+            health = ProviderRegistry().get(config.provider).health_check()
+            if not health.get("ready_for_generation"):
+                detail = health.get("detail") or "The local voice runtime is not ready."
+                raise StudioApiError(
+                    f"Narration cache is missing for {', '.join(uncached)}. {detail}", HTTPStatus.CONFLICT,
+                )
+
+    def start_render(self, project_id: str, quality: str, voice_steps: int = 4) -> dict[str, Any]:
+        identifier = self._project_id(project_id)
+        self._project_root(identifier)
+        if quality not in {"preview", "final"}:
+            raise StudioApiError("Render quality must be preview or final.")
+        if voice_steps not in {4, 8, 16}:
+            raise StudioApiError("Voice quality must be Fast (4), Balanced (8), or Detailed (16).")
+        if quality == "preview":
+            self._validate_voice_capacity(identifier, voice_steps)
+        service = RenderService(self.workspace_root, identifier)
+        try:
+            service._preflight(final=quality == "final", require_audio=quality == "final")
+        except (RuntimeError, FileNotFoundError) as exc:
+            raise StudioApiError(str(exc), HTTPStatus.CONFLICT) from exc
+        with self._render_lock:
+            existing = self._render_jobs.get(identifier)
+            if existing and existing["status"] == "running":
+                raise StudioApiError("A render is already running for this project.", HTTPStatus.CONFLICT)
+            if quality == "preview":
+                manifest = self.manager.load(identifier)
+                manifest["render"] = {**dict(manifest.get("render") or {}), "voice_steps": voice_steps,
+                                      "preview_ready": False, "preview_approved": False, "final_ready": False}
+                self.manager.save(identifier, manifest)
+            else:
+                manifest = self.manager.load(identifier)
+                manifest["render"] = {**dict(manifest.get("render") or {}), "final_ready": False}
+                self.manager.save(identifier, manifest)
+            job = {"status": "running", "quality": quality, "step": 0, "progress": 5,
+                   "detail": "Preparing approved scenes", "error": None, "video_url": None}
+            self._render_jobs[identifier] = job
+            self._persist_render_job(identifier, job)
+        threading.Thread(target=self._run_render, args=(identifier, quality, voice_steps), daemon=True).start()
+        return dict(job)
+
+    def _persist_render_job(self, project_id: str, job: dict[str, Any]) -> None:
+        path = self._project_root(project_id) / "metadata" / "render-job.json"
+        try:
+            path.parent.mkdir(parents=True, exist_ok=True)
+            temporary = path.with_suffix(".json.tmp")
+            temporary.write_text(json.dumps(job, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+            temporary.replace(path)
+        except OSError:
+            pass  # Job progress remains available in memory even if the status file cannot be saved.
+
+    def _update_render_job(self, project_id: str, **changes: Any) -> None:
+        with self._render_lock:
+            self._render_jobs[project_id].update(changes)
+            self._persist_render_job(project_id, self._render_jobs[project_id])
+
+    def _run_render(self, project_id: str, quality: str, voice_steps: int) -> None:
+        model_released = False
+        try:
+            service = RenderService(self.workspace_root, project_id)
+            if quality == "preview":
+                self._update_render_job(project_id, step=1, progress=12,
+                                        detail="Generating local OmniVoice narration and subtitles")
+                manifest = self.manager.load(project_id)
+                decisions = (manifest.get("render") or {}).get("scene_decisions") or {}
+                scene_ids = {str(scene["id"]) for scene in self._read_json(
+                    self._project_root(project_id) / "remotion.json",
+                ).get("scenes", []) if decisions.get(scene["id"]) != "cut"}
+                def scene_progress(index: int, total: int, scene_id: str) -> None:
+                    self._update_render_job(project_id, step=1, progress=min(59, 12 + round(46 * (index - 1) / total)),
+                                            detail=f"OmniVoice scene {min(index, total)}/{total}: {scene_id}")
+
+                NarrationTimelineService(self.workspace_root, project_id).prepare(
+                    synthesize=True, num_step=voice_steps, on_scene=scene_progress,
+                    included_scene_ids=scene_ids,
+                )
+            self._update_render_job(project_id, step=3, progress=60, detail="Releasing OmniVoice memory for video rendering")
+            OmniVoiceProvider.shutdown_warm_worker()
+            model_released = True
+            self._update_render_job(project_id, step=4, progress=65,
+                                    detail=f"Rendering {quality} with Remotion")
+            output = service.render_preview() if quality == "preview" else service.render_final()
+            if not output.is_file() or output.stat().st_size == 0:
+                raise RuntimeError("Renderer finished without creating a playable video.")
+            self._update_render_job(project_id, status="complete", step=6, progress=100,
+                                    detail=f"{quality.capitalize()} video ready for review",
+                                    video_url=f"/api/projects/{project_id}/render/{quality}")
+        except Exception as exc:
+            self._update_render_job(project_id, status="failed", detail="Render failed", error=str(exc))
+        finally:
+            # Also release the model if narration fails before Remotion starts.
+            if not model_released:
+                OmniVoiceProvider.shutdown_warm_worker()
+
+    def render_status(self, project_id: str) -> dict[str, Any]:
+        root = self._project_root(project_id)
+        with self._render_lock:
+            job = self._render_jobs.get(project_id)
+            if job:
+                return dict(job)
+        manifest = self._read_json(root / "project.json")
+        render = manifest.get("render") or {}
+        quality = "final" if render.get("final_ready") else "preview"
+        ready = bool(render.get(f"{quality}_ready")) and (root / "render" / quality / f"{quality}.mp4").is_file()
+        previous = self._read_json(root / "metadata" / "render-job.json")
+        if previous.get("status") == "failed" and not ready:
+            return previous
+        if previous.get("status") == "running" and not ready:
+            return {**previous, "status": "failed", "detail": "Render interrupted",
+                    "error": "The local server stopped during rendering. Start the render again."}
+        return {"status": "complete" if ready else "idle", "quality": quality, "step": 6 if ready else -1,
+                "progress": 100 if ready else 0, "detail": "Video ready for review" if ready else "Ready to render",
+                "error": None, "video_url": f"/api/projects/{project_id}/render/{quality}" if ready else None}
+
+    def render_media_path(self, project_id: str, quality: str) -> Path:
+        root = self._project_root(project_id)
+        if quality not in {"preview", "final"}:
+            raise StudioApiError("Unknown render quality.", HTTPStatus.NOT_FOUND)
+        manifest = self._read_json(root / "project.json")
+        path = root / "render" / quality / f"{quality}.mp4"
+        if not (manifest.get("render") or {}).get(f"{quality}_ready") or not path.is_file():
+            raise StudioApiError("Video is not ready yet.", HTTPStatus.NOT_FOUND)
+        return path
+
+    def approve_render_preview(self, project_id: str) -> dict[str, Any]:
+        self._project_root(project_id)
+        try:
+            return RenderService(self.workspace_root, project_id).approve_preview()
+        except RuntimeError as exc:
+            raise StudioApiError(str(exc), HTTPStatus.CONFLICT) from exc
 
     def voice_catalog(self) -> dict[str, Any]:
         registry = ProviderRegistry()
@@ -439,6 +650,12 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
             if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3:] == ["voice", "preview"]:
                 self._video(self.app.voice_preview_path(parts[2]))
                 return
+            if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3:] == ["render", "status"]:
+                self._json(HTTPStatus.OK, self.app.render_status(parts[2]))
+                return
+            if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3] == "render":
+                self._video(self.app.render_media_path(parts[2], parts[4]))
+                return
             if len(parts) == 6 and parts[:2] == ["api", "projects"] and parts[3] == "scenes" and parts[5] == "source":
                 self._video(self.app.source_video_path(parts[2], parts[4]))
                 return
@@ -498,6 +715,17 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
                 return
             if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3:] == ["voice", "approve"]:
                 self._json(HTTPStatus.OK, self.app.approve_voice(parts[2]))
+                return
+            if len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] == "render":
+                body = self._body_json()
+                self._json(HTTPStatus.ACCEPTED, self.app.start_render(parts[2], str(body.get("quality", "preview")), int(body.get("voice_steps", 4))))
+                return
+            if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3:] == ["render", "approve-preview"]:
+                self._json(HTTPStatus.OK, self.app.approve_render_preview(parts[2]))
+                return
+            if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3:] == ["render", "decisions"]:
+                body = self._body_json()
+                self._json(HTTPStatus.OK, self.app.set_scene_decisions(parts[2], body.get("decisions") or {}))
                 return
             if len(parts) == 6 and parts[:2] == ["api", "projects"] and parts[3] == "scenes" and parts[5] == "video":
                 body = self._body_json()

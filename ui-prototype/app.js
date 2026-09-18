@@ -70,11 +70,11 @@ const state = {
   voiceRuntime: { available: false, ready_for_generation: false, status: "checking", detail: "Checking local OmniVoice runtime…" },
   subtitleState: { language: "same", font: "Be Vietnam Pro", weight: "SemiBold", size: 55, position: "Bottom", offset: 102, highlight: true, safeZone: true },
   audioState: { narration: 100, source: 30, bgm: 12, sfx: 35, master: 100 },
-  workflowState: { scriptApproved: false, voiceApproved: false, previewReady: false },
+  workflowState: { scriptApproved: false, voiceApproved: false, previewReady: false, previewApproved: false, finalReady: false },
   reviewState: { finalized: false, dirty: false },
   automationState: { status: "SOURCE READY", progress: 100, step: 1 },
   importReport: null,
-  renderState: { quality: "preview", status: "READY", progress: 0, activeStep: -1, requestScene: "scene_11", requestCategory: "Source" },
+  renderState: { quality: "preview", status: "READY", progress: 0, activeStep: -1, requestScene: "scene_11", requestCategory: "Source", videoUrl: null, error: null, voiceSteps: 4 },
   uiState: { screen: "dashboard", inspector: "scene", projectMenuOpen: false },
 };
 
@@ -85,6 +85,7 @@ const DEFAULT_RENDER_STATE = structuredClone(state.renderState);
 
 const STUDIO_API = "/api";
 let backendOnline = false;
+let renderPollTimer = null;
 
 async function apiRequest(path, options = {}) {
   const headers = { ...(options.body instanceof Blob ? {} : { "Content-Type": "application/json" }), ...(options.headers || {}) };
@@ -128,22 +129,29 @@ function applyBackendProject(detail) {
         sourceVersion: current.version || 0, duration: +(current.probe?.duration || Math.max(1, item.duration_in_frames / (remotion.fps || 30))).toFixed(1),
         status: current.status || video.status || "missing", sourceAudio: { mode: audio.mode || "mute", volume: Math.round((audio.volume || 0) * 100), duck: Boolean(audio.duck_under_narration), fadeIn: audio.fade_in || 0, fadeOut: audio.fade_out || 0 },
         edit: { trimStart: current.trim?.start || 0, trimEnd: current.trim?.end || null, speed: timing.playback_rate || 1, crop: current.crop?.mode || "cover", position: "center", holdLastFrame: Boolean(timing.hold_last_frame), transition: item.transition || "none" },
-        decision: "keep", voiceOverride: null,
+        decision: manifest.render?.scene_decisions?.[item.id] || "keep", voiceOverride: null,
       };
     }),
     selectedId: detail.scenes?.[0]?.id || null, sceneCount: detail.scenes?.length || 0, timelineZoom: 1,
   };
   state.scriptState = { bulkText: detail.script_text || "", mapped: state.sceneState.items.filter(scene => scene.narration).length, missing: state.sceneState.items.filter(scene => !scene.narration).length, approved: Boolean(manifest.script?.approved) };
   state.voiceState = { ...structuredClone(DEFAULT_VOICE_STATE), provider: voice.provider || "omnivoice", language: voice.language || "vi", locale: voice.locale || "default", mode: voice.mode || "voice_design", gender: voice.design?.gender || "male", age: voice.design?.age || "young adult", pitch: voice.design?.pitch || "moderate", speed: voice.speed || 1.1, previewStatus: voice.preview_file ? "GENERATED" : "NOT GENERATED", previewUrl: voice.preview_file ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/voice/preview?t=${encodeURIComponent(manifest.updated_at || "")}` : null };
-  state.workflowState = { scriptApproved: Boolean(manifest.script?.approved), voiceApproved: Boolean(voice.approved), previewReady: Boolean(manifest.render?.preview_ready) };
-  state.reviewState = { finalized: Boolean(manifest.render?.final_ready), dirty: false, showCutsOnly: false };
+  state.workflowState = { scriptApproved: Boolean(manifest.script?.approved), voiceApproved: Boolean(voice.approved), previewReady: Boolean(manifest.render?.preview_ready), previewApproved: Boolean(manifest.render?.preview_approved), finalReady: Boolean(manifest.render?.final_ready) };
+  state.reviewState = { finalized: Boolean(manifest.render?.final_ready), dirty: Boolean(manifest.render?.review_dirty), showCutsOnly: false };
   state.automationState = { status: summary.imported ? "SOURCE READY" : "IDLE", progress: summary.imported ? 100 : 0, step: summary.imported ? 1 : 0 };
-  state.renderState = { ...structuredClone(DEFAULT_RENDER_STATE), requestScene: state.sceneState.selectedId || "" };
+  state.renderState = { ...structuredClone(DEFAULT_RENDER_STATE), requestScene: state.sceneState.selectedId || "",
+    voiceSteps: Number(manifest.render?.voice_steps || 4),
+    status: manifest.render?.final_ready ? "FINAL READY" : manifest.render?.preview_ready ? "PREVIEW READY" : "READY",
+    videoUrl: manifest.render?.final_ready ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/render/final` : manifest.render?.preview_ready ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/render/preview` : null,
+    progress: manifest.render?.final_ready || manifest.render?.preview_ready ? 100 : 0 };
 }
 
 async function loadBackendProject(projectId) {
   const detail = await apiRequest(`/projects/${encodeURIComponent(projectId)}`);
   applyBackendProject(detail);
+  const renderStatus = await apiRequest(`/projects/${encodeURIComponent(projectId)}/render/status`).catch(() => null);
+  if (renderStatus) applyRenderStatus(renderStatus);
+  if (renderStatus?.status === "running") { watchRenderStatus(); renderScreen(); }
   state.uiState.projectMenuOpen = false;
   renderScreen();
   return detail;
@@ -343,7 +351,8 @@ function renderScenes() {
   const cut = cutScenes().length;
   if (!state.sceneState.items.length) return `<section class="screen">${screenHeader("Final Review", "Import a source and approve its script and voice first. Final review becomes available after a preview render.", `<button class="button" data-nav="import">Import source</button>`)}<div class="empty-state"><div><h2>No review timeline yet</h2><p>Once a preview video exists, each scene appears here with Keep/Cut and basic edit controls.</p></div></div></section>`;
   if (!state.workflowState.previewReady) return `<section class="screen">${screenHeader("Final Review", "Final review is deliberately after preview rendering. First approve the script, tune the voice, and create a review video.", `<button class="button" data-nav="${!state.workflowState.scriptApproved ? "script" : !state.workflowState.voiceApproved ? "voice" : "render"}">Open next step</button>`)}<div class="empty-state"><div><h2>Preview video not ready</h2><p>You will choose Keep/Cut and make basic video edits only after you can watch the generated preview.</p></div></div></section>`;
-  return `<section class="screen">${screenHeader("Final Review", "Watch the generated preview, then choose Keep or Cut and adjust trim, speed, crop, transition, or source audio. Re-render a preview after edits; export only when you are satisfied.", `<button class="button-secondary" data-action="keep-all-scenes">Keep all</button><button class="button-secondary" data-action="rerender-preview">${state.reviewState.dirty ? "Render updated preview" : "Render another preview"}</button><button class="button" data-action="approve-export">Approve & Export</button>`)}
+  return `<section class="screen">${screenHeader("Final Review", "Watch the generated preview, then choose Keep or Cut and adjust trim, speed, crop, transition, or source audio. Re-render a preview after edits; approve it before final rendering.", `<button class="button-secondary" data-action="keep-all-scenes">Keep all</button><button class="button-secondary" data-action="rerender-preview">${state.reviewState.dirty ? "Render updated preview" : "Render another preview"}</button><button class="button" data-action="approve-export" ${state.reviewState.dirty || state.workflowState.previewApproved ? "disabled" : ""}>${state.workflowState.previewApproved ? "Preview approved" : "Approve preview"}</button>`)}
+    <section class="card card-pad" style="margin-bottom:16px"><p class="eyebrow">Rendered preview</p><video controls preload="metadata" style="display:block;max-height:480px;max-width:100%;margin:12px auto" src="${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/render/preview"></video></section>
     <section class="card card-pad review-summary"><div><p class="eyebrow">Post-render decision</p><h2 class="card-title">${kept} kept · ${cut} cut · ${formatTime(projectDuration())} final duration</h2><p class="caption">${state.reviewState.dirty ? "Edits are pending a new preview render." : "Cut scenes stay available for reversal and are excluded from any new render."}</p></div><button class="button-quiet" data-action="toggle-cut-filter">${state.reviewState.showCutsOnly ? "Show all scenes" : "Show cuts only"}</button></section>
     <div class="scene-grid">${state.sceneState.items.filter(scene => !state.reviewState.showCutsOnly || scene.decision === "cut").map(sceneCard).join("")}</div>
   </section>`;
@@ -408,8 +417,11 @@ function renderRender() {
   const cut = cutScenes().length;
   const canRender = state.workflowState.scriptApproved && state.workflowState.voiceApproved;
   const hasPreview = state.workflowState.previewReady;
-  return `<section class="screen">${screenHeader("Render", canRender ? `${kept} kept scenes will be included; ${cut} cut scenes are excluded. Create a preview, then watch it in Final Review before exporting.` : "Rendering is locked until you approve scene-by-scene script mapping and manual voice settings.", `<button class="button-quiet" data-nav="${hasPreview ? "scenes" : !state.workflowState.scriptApproved ? "script" : "voice"}">${hasPreview ? "Open Final Review" : !state.workflowState.scriptApproved ? "Review Script" : "Review Voice"}</button><button class="button-secondary" data-action="start-render" data-quality="preview" ${canRender ? "" : "disabled"}>Render Preview</button><button class="button" data-action="start-render" data-quality="final" ${canRender ? "" : "disabled"}>Render Final</button>`)}
-    <div class="render-layout"><section class="card card-pad"><p class="eyebrow">Review player</p><div class="video-player" data-project-title="${escapeHtml(activeProject().name)}"><span class="player-play">▶</span></div><div style="display:flex;justify-content:space-between;margin-top:12px"><span class="caption">${kept} scenes · ${formatTime(projectDuration())} · ${activeProject().aspect} · ${activeProject().fps}fps · H.264</span><div><button class="button-secondary" data-nav="scenes" ${hasPreview ? "" : "disabled"}>Basic edits</button><button class="button-quiet" data-action="approve-export" ${hasPreview ? "" : "disabled"}>Approve & Export</button></div></div></section><section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Render progress</p><h2 class="card-title">${render.status}</h2></div><span class="caption">${render.progress}%</span></div><div class="progress-track"><i style="width:${render.progress}%"></i></div><div class="progress-steps">${steps.map((step, index) => `<div class="progress-step ${index < render.activeStep ? "done" : index === render.activeStep ? "active" : ""}"><span class="progress-dot">${index < render.activeStep ? "✓" : index + 1}</span><div><b>${step}</b><span>${index < render.activeStep ? "Done" : index === render.activeStep ? "Working…" : "Waiting"}</span></div><span class="tiny subtle">${index === 1 ? "Voice" : index === 4 ? "Remotion" : index === 5 ? "FFmpeg" : ""}</span></div>`).join("")}</div></section></div>
+  const isRendering = renderPollTimer !== null;
+  const canRenderFinal = canRender && state.workflowState.previewApproved && !state.reviewState.dirty && !isRendering;
+  const playableUrl = state.workflowState.finalReady ? `${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/render/final` : hasPreview ? `${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/render/preview` : null;
+  return `<section class="screen">${screenHeader("Render", canRender ? "Create a preview with local OmniVoice narration. Watch and approve it before rendering the final video." : "Rendering is locked until you approve scene-by-scene script mapping and manual voice settings.", `<button class="button-quiet" data-nav="${hasPreview ? "scenes" : !state.workflowState.scriptApproved ? "script" : "voice"}">${hasPreview ? "Open Final Review" : !state.workflowState.scriptApproved ? "Review Script" : "Review Voice"}</button><button class="button-secondary" data-action="start-render" data-quality="preview" ${canRender && !isRendering ? "" : "disabled"}>Render Preview</button><button class="button" data-action="start-render" data-quality="final" ${canRenderFinal ? "" : "disabled"}>Render Final</button>`)}
+    <div class="render-layout"><section class="card card-pad"><p class="eyebrow">Review player</p>${playableUrl ? `<video controls preload="metadata" style="display:block;max-height:480px;max-width:100%;margin:12px auto" src="${playableUrl}"></video>` : `<div class="video-player" data-project-title="${escapeHtml(activeProject().name)}"><span class="player-play">▶</span></div>`}<div style="display:flex;justify-content:space-between;margin-top:12px"><span class="caption">${kept} scenes · ${formatTime(projectDuration())} · ${activeProject().aspect} · ${activeProject().fps}fps · H.264</span><div><button class="button-secondary" data-nav="scenes" ${hasPreview ? "" : "disabled"}>Basic edits</button>${state.workflowState.finalReady ? `<a class="button-secondary" href="${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/render/final" download="${escapeHtml(state.projectState.id)}-final.mp4">Download final MP4</a>` : `<button class="button-quiet" data-action="approve-export" ${hasPreview && !state.reviewState.dirty && !state.workflowState.previewApproved ? "" : "disabled"}>${state.workflowState.previewApproved ? "Preview approved" : "Approve preview"}</button>`}</div></div></section><section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Render progress</p><h2 class="card-title">${escapeHtml(render.status)}</h2></div><span class="caption">${render.progress}%</span></div><label class="field-label" style="margin:12px 0 6px">OmniVoice quality for next preview</label><select class="select-input" data-setting="render-voice-steps" ${isRendering ? "disabled" : ""}><option value="4" ${render.voiceSteps === 4 ? "selected" : ""}>Fast · 4 steps</option><option value="8" ${render.voiceSteps === 8 ? "selected" : ""}>Balanced · 8 steps</option><option value="16" ${render.voiceSteps === 16 ? "selected" : ""}>Detailed · 16 steps</option></select><p class="caption" style="margin:6px 0 12px">Final render reuses the narration you approved in the preview.</p><div class="progress-track"><i style="width:${render.progress}%"></i></div>${render.error ? `<p class="warning" style="margin-top:12px">${escapeHtml(render.error)}</p>` : ""}<div class="progress-steps">${steps.map((step, index) => `<div class="progress-step ${index < render.activeStep ? "done" : index === render.activeStep ? "active" : ""}"><span class="progress-dot">${index < render.activeStep ? "✓" : index + 1}</span><div><b>${step}</b><span>${index < render.activeStep ? "Done" : index === render.activeStep ? "Working…" : "Waiting"}</span></div><span class="tiny subtle">${index === 1 ? "Voice" : index === 4 ? "Remotion" : index === 5 ? "FFmpeg" : ""}</span></div>`).join("")}</div></section></div>
     <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Request changes</p><h2 class="card-title">Send a precise revision back through the project</h2></div></div><div class="form-row three"><div><label class="field-label">Scene</label><select class="select-input" data-setting="request-scene">${optionList(state.sceneState.items.map(scene => ({ id: scene.id, label: `Scene ${String(scene.number).padStart(2, "0")} · ${scene.title}` })), render.requestScene)}</select></div><div><label class="field-label">Change type</label><select class="select-input" data-setting="request-category">${optionList(["Source", "Trim", "Speed", "Crop", "Audio", "Transition", "Subtitle", "Voice Timing", "Voice Override"], render.requestCategory)}</select></div><div><label class="field-label">Action</label><button class="button-secondary" style="width:100%" data-action="apply-changes">Apply Changes</button></div></div><textarea id="change-comment" class="textarea-input compact-textarea" style="margin-top:10px" placeholder="Describe the correction for this scene…"></textarea></section>
   </section>`;
 }
@@ -655,7 +667,80 @@ function togglePlay() {
 }
 function saveProfile() { const voice = state.voiceState; const id = `profile-${Date.now()}`; voice.profiles.unshift({ id, name: `Custom ${language().label} ${voice.gender === "male" ? "Male" : "Female"}`, provider: voice.provider, language: voice.language, locale: voice.locale, mode: voice.mode, gender: voice.gender, pitch: voice.pitch, speed: voice.speed }); voice.profileId = id; toast("Voice profile saved to prototype state."); savePulse(); renderScreen(); }
 function useProfile(id) { const profile = state.voiceState.profiles.find(item => item.id === id); if (!profile) return; Object.assign(state.voiceState, { profileId: id, language: profile.language, locale: profile.locale, mode: profile.mode, gender: profile.gender, pitch: profile.pitch, speed: profile.speed, subtitleSync: "NEEDS UPDATE" }); toast(`${profile.name} applied.`); markVoiceChanged("Voice profile changed"); }
-function startRender(quality) { if (backendOnline) { toast("Rendering remains blocked until the local OmniVoice narration gate passes; no mock video is produced in a real project.", "warning"); return; } if (!state.workflowState.scriptApproved || !state.workflowState.voiceApproved) { toast("Approve script mapping and voice before rendering.", "warning"); return; } if (!keptScenes().length) { toast("Keep at least one scene before rendering.", "warning"); return; } const render = state.renderState; state.projectState.stage = "RENDERING"; render.quality = quality; render.status = `RENDERING ${quality.toUpperCase()}`; render.progress = 0; render.activeStep = 0; renderScreen(); const interval = setInterval(() => { render.progress = Math.min(100, render.progress + 9); render.activeStep = Math.min(5, Math.floor(render.progress / 17)); renderScreen(); if (render.progress >= 100) { clearInterval(interval); render.status = quality === "final" ? "FINAL READY FOR REVIEW" : "PREVIEW READY"; render.activeStep = 6; state.workflowState.previewReady = true; state.reviewState.dirty = false; state.projectState.stage = "POST_RENDER_REVIEW"; state.uiState.screen = "scenes"; toast(`${quality === "final" ? "Final" : "Preview"} render complete (mock). Watch it before exporting.`); savePulse("Preview ready for final review"); renderScreen(); } }, 280); }
+function applyRenderStatus(job) {
+  const render = state.renderState;
+  render.quality = job.quality || render.quality;
+  render.status = job.status === "running" ? (job.detail || "RENDERING") : job.status === "failed" ? "FAILED" : job.status === "complete" ? `${render.quality.toUpperCase()} READY` : "READY";
+  render.progress = Number(job.progress || 0);
+  render.activeStep = Number.isInteger(job.step) ? job.step : -1;
+  render.error = job.error || null;
+  if (job.video_url) render.videoUrl = `${job.video_url}?t=${Date.now()}`;
+}
+
+function watchRenderStatus() {
+  if (renderPollTimer) clearInterval(renderPollTimer);
+  const projectId = state.projectState.id;
+  renderPollTimer = setInterval(async () => {
+    try {
+      const job = await apiRequest(`/projects/${encodeURIComponent(projectId)}/render/status`);
+      if (state.projectState.id !== projectId) { clearInterval(renderPollTimer); renderPollTimer = null; return; }
+      if (job.status === "running") { applyRenderStatus(job); if (state.uiState.screen === "render") renderScreen(); return; }
+      clearInterval(renderPollTimer); renderPollTimer = null;
+      if (job.status === "complete") {
+        await loadBackendProject(projectId);
+        state.reviewState.dirty = false;
+        toast(`${job.quality === "final" ? "Final" : "Preview"} video is ready. Watch it before approving.`, "success");
+      } else if (job.status === "failed") {
+        applyRenderStatus(job);
+        toast(job.error || "Render failed. Check the local runtime.", "warning");
+      }
+      renderScreen();
+    } catch (error) { clearInterval(renderPollTimer); renderPollTimer = null; toast(error.message, "warning"); }
+  }, 1500);
+}
+
+async function startRender(quality) {
+  if (!backendOnline) { toast("Start the local studio server before rendering a real video.", "warning"); return; }
+  if (!state.workflowState.scriptApproved || !state.workflowState.voiceApproved) { toast("Approve script mapping and voice before rendering.", "warning"); return; }
+  if (quality === "final" && !state.workflowState.previewApproved) { toast("Render, watch, and approve a preview before final rendering.", "warning"); return; }
+  if (!keptScenes().length) { toast("Keep at least one scene before rendering.", "warning"); return; }
+  if (renderPollTimer) { toast("A render is already running.", "warning"); return; }
+  try {
+    const job = await apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/render`, {
+      method: "POST", body: JSON.stringify({ quality, voice_steps: state.renderState.voiceSteps }),
+    });
+    applyRenderStatus(job);
+    toast(quality === "preview" ? "Generating OmniVoice narration, then rendering preview." : "Rendering final video locally.");
+    watchRenderStatus();
+    renderScreen();
+  } catch (error) { toast(error.message, "warning"); }
+}
+
+async function approveRenderedPreview() {
+  if (!backendOnline) { toast("This approval requires the local studio server.", "warning"); return; }
+  if (!state.workflowState.previewReady || state.reviewState.dirty) { toast("Watch an up-to-date preview before approving it.", "warning"); return; }
+  try {
+    await apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/render/approve-preview`, { method: "POST", body: "{}" });
+    await loadBackendProject(state.projectState.id);
+    toast("Preview approved. You can now render the final video.", "success");
+    renderScreen();
+  } catch (error) { toast(error.message, "warning"); }
+}
+
+async function saveSceneDecisions(decisions) {
+  if (!backendOnline) { toast("Start the local studio server before saving Keep/Cut decisions.", "warning"); return; }
+  const projectId = state.projectState.id;
+  const selectedId = state.sceneState.selectedId;
+  try {
+    await apiRequest(`/projects/${encodeURIComponent(projectId)}/render/decisions`, {
+      method: "POST", body: JSON.stringify({ decisions }),
+    });
+    await loadBackendProject(projectId);
+    state.sceneState.selectedId = selectedId;
+    toast("Keep/Cut saved. Render an updated preview before final approval.", "success");
+    renderScreen();
+  } catch (error) { toast(error.message, "warning"); }
+}
 
 function setBackendVideoStatus(status, sceneId = currentScene()?.id) {
   const scene = state.sceneState.items.find(item => item.id === sceneId);
@@ -701,8 +786,8 @@ document.addEventListener("click", event => {
     case "reject-scene": if (!setBackendVideoStatus("rejected")) { currentScene().status = "rejected"; toast("Scene marked for replacement.", "warning"); savePulse(); renderScreen(); } break;
     case "review-import-source": setBackendVideoStatus(target.dataset.status, target.dataset.sceneId); break;
     case "approve-all": state.sceneState.items.forEach(scene => { if (scene.status === "pending") scene.status = "approved"; }); toast("Visible pending scenes approved."); renderScreen(); break;
-    case "set-scene-decision": if (!state.workflowState.previewReady) { toast("Watch a preview before deciding Keep or Cut.", "warning"); break; } currentScene().decision = target.dataset.decision; markReviewDirty(); toast(`Scene ${String(currentScene().number).padStart(2, "0")} marked ${target.dataset.decision}.`); savePulse("Cut decision saved"); renderScreen(); break;
-    case "keep-all-scenes": if (!state.workflowState.previewReady) { toast("Watch a preview before deciding Keep or Cut.", "warning"); break; } state.sceneState.items.forEach(scene => { scene.decision = "keep"; }); markReviewDirty(); toast("All scenes marked keep."); savePulse("Cut decisions saved"); renderScreen(); break;
+    case "set-scene-decision": if (!state.workflowState.previewReady) { toast("Watch a preview before deciding Keep or Cut.", "warning"); break; } saveSceneDecisions({ [currentScene().id]: target.dataset.decision }); break;
+    case "keep-all-scenes": if (!state.workflowState.previewReady) { toast("Watch a preview before deciding Keep or Cut.", "warning"); break; } saveSceneDecisions(Object.fromEntries(state.sceneState.items.map(scene => [scene.id, "keep"]))); break;
     case "toggle-cut-filter": state.reviewState.showCutsOnly = !state.reviewState.showCutsOnly; renderScreen(); break;
     case "finalize-review": if (!keptScenes().length) { toast("Keep at least one scene before finalizing.", "warning"); break; } state.uiState.screen = "render"; toast(`${keptScenes().length} kept scenes ready for a new preview.`); renderScreen(); break;
     case "replace-source": if (backendOnline) { state.uiState.screen = "import"; toast("Import a replacement ZIP or folder; existing versions remain available."); renderScreen(); } else { currentScene().source = "Google Flow"; currentScene().sourceVersion += 1; currentScene().status = "pending"; toast("Source replacement queued (mock).", "warning"); renderScreen(); } break;
@@ -735,7 +820,7 @@ document.addEventListener("click", event => {
     case "save-subtitles": case "save-audio": toast("Preset saved to prototype state."); savePulse(); break;
     case "start-render": startRender(target.dataset.quality); break;
     case "rerender-preview": startRender("preview"); break;
-    case "approve-export": if (!state.workflowState.previewReady) { toast("Render and watch a preview before export approval.", "warning"); break; } if (state.reviewState.dirty) { toast("Render an updated preview before approving export.", "warning"); break; } state.reviewState.finalized = true; state.projectState.stage = "APPROVED"; toast("Project approved for export (mock)."); savePulse("Export approved"); renderScreen(); break;
+    case "approve-export": approveRenderedPreview(); break;
     case "request-changes": $("#change-comment")?.focus(); break;
     case "apply-changes": if (!state.workflowState.previewReady) { toast("Create a preview before applying review changes.", "warning"); break; } markReviewDirty(); state.uiState.screen = "scenes"; toast("Change request recorded. Adjust the scene and render an updated preview.", "warning"); savePulse("Review change requested"); renderScreen(); break;
     case "timeline-zoom-in": state.sceneState.timelineZoom = Math.min(1.6, state.sceneState.timelineZoom + .1); renderTimeline(); break;
@@ -756,6 +841,7 @@ document.addEventListener("change", event => {
   if (setting === "subtitle-size") { state.subtitleState.size = Number(target.value); }
   if (setting?.startsWith("audio-")) { const key = setting.replace("audio-", ""); state.audioState[key] = Number(target.value); renderScreen(); }
   if (setting === "request-scene") state.renderState.requestScene = target.value;
+  if (setting === "render-voice-steps") state.renderState.voiceSteps = Number(target.value);
   if (setting === "request-category") state.renderState.requestCategory = target.value;
   if (setting === "project-stage") { state.projectState.stage = target.value; savePulse("Project status updated"); renderScreen(); }
   if (target.dataset.sceneSetting) {

@@ -18,7 +18,9 @@ class RemotionRenderer:
         cli = self.repo_root / "remotion" / "node_modules" / "@remotion" / "cli" / "remotion-cli.js"
         if not node or not cli.is_file():
             raise FileNotFoundError("Install the Remotion runtime first: pnpm --dir remotion install")
-        props = Path("..") / "projects" / project_name / "remotion-props.json"
+        project_root = self.repo_root / "projects" / project_name
+        props_name = "render/render-props.json" if (project_root / "render" / "render-props.json").is_file() else "remotion-props.json"
+        props = Path("..") / "projects" / project_name / props_name
         try:
             output_relative_to_project = output.resolve().relative_to(self.repo_root / "projects" / project_name)
         except ValueError as exc:
@@ -33,9 +35,18 @@ class RemotionRenderer:
             "--offthreadvideo-video-threads=1",
         ]
         if preview:
-            command.append("--scale=0.5")
+            # 432x768 keeps captions readable while reducing pixel work on
+            # the four-thread, low-memory target machine.
+            command.append("--scale=0.4")
         output.parent.mkdir(parents=True, exist_ok=True)
-        subprocess.run(command, cwd=self.repo_root / "remotion", check=True)
+        log_path = project_root / "metadata" / "logs" / f"remotion-{'preview' if preview else 'final'}.log"
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with log_path.open("w", encoding="utf-8") as log:
+            completed = subprocess.run(command, cwd=self.repo_root / "remotion", stdout=log,
+                                       stderr=subprocess.STDOUT, check=False)
+        if completed.returncode != 0:
+            detail = " | ".join(log_path.read_text(encoding="utf-8", errors="replace").splitlines()[-4:])
+            raise RuntimeError(f"Remotion render failed: {detail or f'exit code {completed.returncode}'}. See {log_path}")
         return output
 
 
@@ -54,12 +65,14 @@ class FFmpegFinalizer:
         return candidate
 
     def finalize(self, source: Path, output: Path) -> Path:
-        subprocess.run([
+        completed = subprocess.run([
             str(self._ffmpeg()), "-y", "-loglevel", "error", "-i", str(source),
             "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy",
             "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
             "-movflags", "+faststart", str(output),
-        ], check=True)
+        ], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+        if completed.returncode != 0:
+            raise RuntimeError(f"FFmpeg finalization failed: {(completed.stderr or '').strip()[-500:]}")
         return output
 
 
@@ -79,7 +92,7 @@ class RenderService:
     def _is_desktop_project(self) -> bool:
         return self.manifest_path.is_file()
 
-    def _preflight(self, *, final: bool) -> dict:
+    def _preflight(self, *, final: bool, require_audio: bool = True) -> dict:
         """Validate creator approval gates for a new local studio project.
 
         Legacy projects retain their existing render path.  New projects are
@@ -91,12 +104,16 @@ class RenderService:
             return {}
         manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         remotion = json.loads((self.project_root / "remotion.json").read_text(encoding="utf-8"))
+        decisions = (manifest.get("render") or {}).get("scene_decisions") or {}
+        included = [scene for scene in remotion.get("scenes", []) if decisions.get(scene.get("id")) != "cut"]
         missing: list[str] = []
+        if not included:
+            missing.append("at least one kept scene")
         if not manifest.get("script", {}).get("approved"):
             missing.append("script mapping approval")
         if not manifest.get("voice", {}).get("approved"):
             missing.append("voice approval")
-        for scene in remotion.get("scenes", []):
+        for scene in included:
             scene_id = str(scene.get("id", "unknown"))
             metadata_path = self.project_root / "scenes" / scene_id / "metadata.json"
             if not metadata_path.is_file() or not json.loads(metadata_path.read_text(encoding="utf-8")).get("approved_version"):
@@ -104,14 +121,29 @@ class RenderService:
             if not str(scene.get("narration", "")).strip():
                 missing.append(f"script for {scene_id}")
             audio = self.project_root / str(scene.get("narrationAudio", ""))
-            if not audio.is_file():
+            if require_audio and not audio.is_file():
                 missing.append(f"narration audio for {scene_id}")
         render = manifest.get("render", {})
         if final and not render.get("preview_approved"):
             missing.append("preview approval before final render")
+        if final and render.get("review_dirty"):
+            missing.append("an updated preview after scene edits")
         if missing:
             raise RuntimeError("Render is blocked until: " + "; ".join(missing))
         return manifest
+
+    def _prepare_render_config(self, manifest: dict) -> None:
+        if not self._is_desktop_project():
+            return
+        source = json.loads((self.project_root / "remotion.json").read_text(encoding="utf-8"))
+        decisions = (manifest.get("render") or {}).get("scene_decisions") or {}
+        source["scenes"] = [scene for scene in source.get("scenes", []) if decisions.get(scene.get("id")) != "cut"]
+        render_root = self.project_root / "render"
+        render_root.mkdir(parents=True, exist_ok=True)
+        (render_root / "render-remotion.json").write_text(json.dumps(source, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        (render_root / "render-props.json").write_text(
+            json.dumps({"projectSlug": self.project_name, "configFile": "render/render-remotion.json"}) + "\n", encoding="utf-8",
+        )
 
     def approve_preview(self) -> dict:
         """Record the creator's review decision before a full final render."""
@@ -120,25 +152,33 @@ class RenderService:
             return self.state.set("APPROVED", "legacy preview approved")
         manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
         preview = self.project_root / "render" / "preview" / "preview.mp4"
-        if not preview.is_file():
+        if not (manifest.get("render") or {}).get("preview_ready") or not preview.is_file():
             raise RuntimeError("Render and review a preview before approving final render.")
+        if (manifest.get("render") or {}).get("review_dirty"):
+            raise RuntimeError("Render an updated preview after scene edits before approval.")
         manifest["render"] = {**dict(manifest.get("render") or {}), "preview_ready": True, "preview_approved": True}
+        manifest["status"] = "READY_TO_RENDER"
         self.manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         self.state.set("READY_TO_RENDER", "preview approved by creator")
         return manifest
 
     def render_preview(self) -> Path:
-        self._preflight(final=False)
+        manifest = self._preflight(final=False)
+        self._prepare_render_config(manifest)
         output = self.project_root / ("render/preview/preview.mp4" if self._is_desktop_project() else "output/preview.mp4")
         self.state.set("RENDERING", "preview")
         try:
             self.renderer.render(self.project_name, output, preview=True)
+            if not output.is_file() or output.stat().st_size == 0:
+                raise RuntimeError("Preview renderer did not create a video file.")
         except Exception:
             self.state.set("NEEDS_CHANGES", "preview render failed")
             raise
         if self._is_desktop_project():
             manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
-            manifest["render"] = {**dict(manifest.get("render") or {}), "preview_ready": True, "preview_approved": False}
+            manifest["render"] = {**dict(manifest.get("render") or {}), "preview_ready": True, "preview_approved": False,
+                                  "review_dirty": False, "final_ready": False}
+            manifest["status"] = "POST_RENDER_REVIEW"
             self.manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             self.state.set("POST_RENDER_REVIEW", "preview ready for creator review")
         else:
@@ -146,7 +186,8 @@ class RenderService:
         return output
 
     def render_final(self) -> Path:
-        self._preflight(final=True)
+        manifest = self._preflight(final=True)
+        self._prepare_render_config(manifest)
         if self._is_desktop_project():
             intermediate = self.project_root / "render" / "final" / "final_remotion.mp4"
             output = self.project_root / "render" / "final" / "final.mp4"
@@ -157,12 +198,15 @@ class RenderService:
         try:
             self.renderer.render(self.project_name, intermediate, preview=False)
             self.finalizer.finalize(intermediate, output)
+            if not output.is_file() or output.stat().st_size == 0:
+                raise RuntimeError("Finalizer did not create a video file.")
         except Exception:
             self.state.set("NEEDS_CHANGES", "final render failed")
             raise
         if self._is_desktop_project():
             manifest = json.loads(self.manifest_path.read_text(encoding="utf-8"))
             manifest["render"] = {**dict(manifest.get("render") or {}), "final_ready": True}
+            manifest["status"] = "POST_RENDER_REVIEW"
             self.manifest_path.write_text(json.dumps(manifest, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
             self.state.set("POST_RENDER_REVIEW", "final ready for creator review")
         else:

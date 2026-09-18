@@ -16,6 +16,7 @@ from ..base import VoiceGenerationRequest, VoiceProvider, VoiceSynthesisResult, 
 
 COMFORTABLE_MEMORY_BYTES = 3 * 1024**3
 MIN_COMMIT_HEADROOM_BYTES = 1 * 1024**3
+MIN_PHYSICAL_HEADROOM_BYTES = 256 * 1024**2
 
 
 class _MemoryStatus(ctypes.Structure):
@@ -77,6 +78,11 @@ class OmniVoiceProvider(VoiceProvider):
 
     def _resource_error(self) -> str | None:
         headroom = _memory_headroom()
+        if headroom is not None and os.environ.get("OMNIVOICE_ALLOW_LOW_MEMORY") != "1" and headroom["physical"] < MIN_PHYSICAL_HEADROOM_BYTES:
+            return (
+                f"OmniVoice cannot safely start with only {headroom['physical'] / 1024**3:.2f} GB of free RAM. "
+                "Cached audio can still be reused; retry new narration when memory is available."
+            )
         if headroom is not None and headroom["commit"] < MIN_COMMIT_HEADROOM_BYTES and os.environ.get("OMNIVOICE_ALLOW_LOW_MEMORY") != "1":
             return (
                 f"OmniVoice cannot start because Windows has only {headroom['commit'] / 1024**3:.1f} GB of memory/pagefile headroom. "
@@ -95,7 +101,7 @@ class OmniVoiceProvider(VoiceProvider):
         if headroom["physical"] < COMFORTABLE_MEMORY_BYTES:
             return (
                 "ready_low_memory",
-                "Low-memory mode is available. The first CPU preview loads the model; following previews reuse it for 10 minutes and are faster.",
+                "Low-memory mode is available. The first CPU preview loads the model; subsequent previews reuse it briefly while memory permits.",
                 values,
             )
         return "ready", None, values
@@ -152,11 +158,17 @@ class OmniVoiceProvider(VoiceProvider):
         cls._warm_worker_key = None
         if worker is not None:
             if worker.poll() is None:
-                worker.terminate()
+                try:
+                    worker.terminate()
+                except OSError:
+                    pass
                 try:
                     worker.wait(timeout=5)
                 except subprocess.TimeoutExpired:
-                    worker.kill()
+                    try:
+                        worker.kill()
+                    except OSError:
+                        pass
                     worker.wait(timeout=5)
             for stream in (worker.stdin, worker.stdout):
                 if stream is not None and not stream.closed:
@@ -174,7 +186,15 @@ class OmniVoiceProvider(VoiceProvider):
     def _schedule_worker_shutdown(cls) -> None:
         if cls._warm_worker_timer is not None:
             cls._warm_worker_timer.cancel()
-        ttl = max(60, int(os.environ.get("OMNIVOICE_WARM_TTL_SECONDS", "600")))
+        configured = os.environ.get("OMNIVOICE_WARM_TTL_SECONDS")
+        if configured is not None:
+            ttl = max(60, int(configured))
+        else:
+            headroom = _memory_headroom()
+            low_memory = headroom is not None and (
+                headroom["physical"] < 1536 * 1024**2 or headroom["commit"] < 2 * 1024**3
+            )
+            ttl = 120 if low_memory else 600
         timer = threading.Timer(ttl, cls.shutdown_warm_worker)
         timer.daemon = True
         cls._warm_worker_timer = timer
