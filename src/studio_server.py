@@ -386,6 +386,28 @@ class StudioApplication:
         self._mark_render_dirty(project_id)
         return result
 
+    def update_project_audio(self, project_id: str, request: dict[str, Any]) -> dict[str, Any]:
+        """Persist the project-wide Flow source-audio policy and current scenes."""
+
+        self._ensure_render_idle(project_id)
+        mode = str(request.get("source_mode", "background"))
+        volume = float(request.get("source_volume", 0.30))
+        duck = bool(request.get("source_duck", True))
+        if mode not in {"mute", "background", "full"}:
+            raise ValueError("Source audio mode must be mute, background or full.")
+        if not 0 <= volume <= 1:
+            raise ValueError("Source audio volume must be in the 0..1 range.")
+        SceneVideoStore(self.workspace_root, self._project_id(project_id)).set_all_source_audio(
+            mode, volume, duck,
+        )
+        manifest = self.manager.load(project_id)
+        audio = dict(manifest.get("audio") or {})
+        audio.update({"source_mode": mode, "source_volume": volume, "source_duck": duck})
+        manifest["audio"] = audio
+        self.manager.save(project_id, manifest)
+        self._mark_render_dirty(project_id)
+        return self.manager.load(project_id)
+
     def _mark_render_dirty(self, project_id: str) -> None:
         if not (self._project_root(project_id) / "project.json").is_file():
             return
@@ -709,6 +731,9 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
                 return
             if len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] == "voice":
                 self._json(HTTPStatus.OK, self.app.update_voice(parts[2], self._body_json()))
+                return
+            if len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] == "audio":
+                self._json(HTTPStatus.OK, self.app.update_project_audio(parts[2], self._body_json()))
                 return
             if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3:] == ["voice", "preview"]:
                 self._json(HTTPStatus.OK, self.app.generate_voice_preview(parts[2], self._body_json()))

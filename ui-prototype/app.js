@@ -69,7 +69,7 @@ const state = {
   },
   voiceRuntime: { available: false, ready_for_generation: false, status: "checking", detail: "Checking local OmniVoice runtime…" },
   subtitleState: { language: "same", font: "Be Vietnam Pro", weight: "SemiBold", size: 55, position: "Bottom", offset: 102, highlight: true, safeZone: true },
-  audioState: { narration: 100, source: 30, bgm: 12, sfx: 35, master: 100 },
+  audioState: { narration: 100, source: 30, sourceMode: "background", sourceDuck: true, bgm: 12, sfx: 35, master: 100 },
   workflowState: { scriptApproved: false, voiceApproved: false, previewReady: false, previewApproved: false, finalReady: false },
   reviewState: { finalized: false, dirty: false },
   automationState: { status: "SOURCE READY", progress: 100, step: 1 },
@@ -86,6 +86,8 @@ const DEFAULT_RENDER_STATE = structuredClone(state.renderState);
 const STUDIO_API = "/api";
 let backendOnline = false;
 let renderPollTimer = null;
+let projectWriteQueue = Promise.resolve();
+let projectWriteError = null;
 
 async function apiRequest(path, options = {}) {
   const headers = { ...(options.body instanceof Blob ? {} : { "Content-Type": "application/json" }), ...(options.headers || {}) };
@@ -134,6 +136,16 @@ function applyBackendProject(detail) {
     }),
     selectedId: detail.scenes?.[0]?.id || null, sceneCount: detail.scenes?.length || 0, timelineZoom: 1,
   };
+  const projectAudio = manifest.audio || {};
+  const firstSourceAudio = state.sceneState.items[0]?.sourceAudio || {};
+  state.audioState = {
+    ...structuredClone(DEFAULT_AUDIO_STATE),
+    narration: Math.round(Number(projectAudio.narration_volume ?? 1) * 100),
+    source: Math.round(Number(projectAudio.source_volume ?? (firstSourceAudio.volume ?? 30) / 100) * 100),
+    sourceMode: projectAudio.source_mode || firstSourceAudio.mode || "mute",
+    sourceDuck: projectAudio.source_duck ?? firstSourceAudio.duck ?? true,
+    bgm: Math.round(Number(projectAudio.bgm_volume ?? 0.12) * 100),
+  };
   state.scriptState = { bulkText: detail.script_text || "", mapped: state.sceneState.items.filter(scene => scene.narration).length, missing: state.sceneState.items.filter(scene => !scene.narration).length, approved: Boolean(manifest.script?.approved) };
   state.voiceState = { ...structuredClone(DEFAULT_VOICE_STATE), provider: voice.provider || "omnivoice", language: voice.language || "vi", locale: voice.locale || "default", mode: voice.mode || "voice_design", gender: voice.design?.gender || "male", age: voice.design?.age || "young adult", pitch: voice.design?.pitch || "moderate", speed: voice.speed || 1.1, previewStatus: voice.preview_file ? "GENERATED" : "NOT GENERATED", previewUrl: voice.preview_file ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/voice/preview?t=${encodeURIComponent(manifest.updated_at || "")}` : null };
   state.workflowState = { scriptApproved: Boolean(manifest.script?.approved), voiceApproved: Boolean(voice.approved), previewReady: Boolean(manifest.render?.preview_ready), previewApproved: Boolean(manifest.render?.preview_approved), finalReady: Boolean(manifest.render?.final_ready) };
@@ -142,7 +154,7 @@ function applyBackendProject(detail) {
   state.renderState = { ...structuredClone(DEFAULT_RENDER_STATE), requestScene: state.sceneState.selectedId || "",
     voiceSteps: Number(manifest.render?.voice_steps || 4),
     status: manifest.render?.final_ready ? "FINAL READY" : manifest.render?.preview_ready ? "PREVIEW READY" : "READY",
-    videoUrl: manifest.render?.final_ready ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/render/final` : manifest.render?.preview_ready ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/render/preview` : null,
+    videoUrl: manifest.render?.final_ready ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/render/final?t=${Date.now()}` : manifest.render?.preview_ready ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/render/preview?t=${Date.now()}` : null,
     progress: manifest.render?.final_ready || manifest.render?.preview_ready ? 100 : 0 };
 }
 
@@ -352,7 +364,7 @@ function renderScenes() {
   if (!state.sceneState.items.length) return `<section class="screen">${screenHeader("Final Review", "Import a source and approve its script and voice first. Final review becomes available after a preview render.", `<button class="button" data-nav="import">Import source</button>`)}<div class="empty-state"><div><h2>No review timeline yet</h2><p>Once a preview video exists, each scene appears here with Keep/Cut and basic edit controls.</p></div></div></section>`;
   if (!state.workflowState.previewReady) return `<section class="screen">${screenHeader("Final Review", "Final review is deliberately after preview rendering. First approve the script, tune the voice, and create a review video.", `<button class="button" data-nav="${!state.workflowState.scriptApproved ? "script" : !state.workflowState.voiceApproved ? "voice" : "render"}">Open next step</button>`)}<div class="empty-state"><div><h2>Preview video not ready</h2><p>You will choose Keep/Cut and make basic video edits only after you can watch the generated preview.</p></div></div></section>`;
   return `<section class="screen">${screenHeader("Final Review", "Watch the generated preview, then choose Keep or Cut and adjust trim, speed, crop, transition, or source audio. Re-render a preview after edits; approve it before final rendering.", `<button class="button-secondary" data-action="keep-all-scenes">Keep all</button><button class="button-secondary" data-action="rerender-preview">${state.reviewState.dirty ? "Render updated preview" : "Render another preview"}</button><button class="button" data-action="approve-export" ${state.reviewState.dirty || state.workflowState.previewApproved ? "disabled" : ""}>${state.workflowState.previewApproved ? "Preview approved" : "Approve preview"}</button>`)}
-    <section class="card card-pad" style="margin-bottom:16px"><p class="eyebrow">Rendered preview</p><video controls preload="metadata" style="display:block;max-height:480px;max-width:100%;margin:12px auto" src="${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/render/preview"></video></section>
+    <section class="card card-pad" style="margin-bottom:16px"><p class="eyebrow">Rendered preview</p><video controls preload="metadata" style="display:block;max-height:480px;max-width:100%;margin:12px auto" src="${state.renderState.videoUrl || `${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/render/preview?t=${Date.now()}`}"></video></section>
     <section class="card card-pad review-summary"><div><p class="eyebrow">Post-render decision</p><h2 class="card-title">${kept} kept · ${cut} cut · ${formatTime(projectDuration())} final duration</h2><p class="caption">${state.reviewState.dirty ? "Edits are pending a new preview render." : "Cut scenes stay available for reversal and are excluded from any new render."}</p></div><button class="button-quiet" data-action="toggle-cut-filter">${state.reviewState.showCutsOnly ? "Show all scenes" : "Show cuts only"}</button></section>
     <div class="scene-grid">${state.sceneState.items.filter(scene => !state.reviewState.showCutsOnly || scene.decision === "cut").map(sceneCard).join("")}</div>
   </section>`;
@@ -406,8 +418,8 @@ function renderSubtitles() {
 
 function renderAudio() {
   const rows = [["Narration", "narration", "Priority 1"], ["Flow Source", "source", "Priority 3"], ["BGM", "bgm", "Priority 4"], ["Important SFX", "sfx", "Priority 2"], ["Master", "master", "Output"]];
-  return `<section class="screen">${screenHeader("Audio mix", "Narration stays dominant. Per-scene source-audio controls are available in the inspector; this screen controls project-wide mix targets.", `<button class="button" data-action="save-audio">Save Mix</button>`)}
-    <div class="grid two"><section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Project mix</p><h2 class="card-title">Level hierarchy</h2></div><span class="status-tag ready">Balanced</span></div>${rows.map(([label, id, note]) => `<div class="audio-level"><div><b>${label}</b><div class="tiny subtle">${note}</div></div><input type="range" min="0" max="100" value="${state.audioState[id]}" data-setting="audio-${id}" /><output>${state.audioState[id]}%</output></div>`).join("")}</section><section class="card card-pad"><p class="eyebrow">Source Audio defaults</p><h2 class="card-title">Flow ambience under narration</h2><div class="form-stack" style="margin-top:17px"><div class="form-row"><div><label class="field-label">Default mode</label><select class="select-input"><option>Background</option><option>Mute</option><option>Full</option></select></div><div><label class="field-label">Default volume</label><select class="select-input"><option>30%</option><option>15%</option><option>50%</option></select></div></div><div class="toggle-row"><span>Duck under narration</span><button class="switch on"></button></div><p class="caption">Priority: Narration → Important SFX → Source ambience → BGM. Nothing here changes source media until a future backend is connected.</p></div></section></div></section>`;
+  return `<section class="screen">${screenHeader("Audio mix", "Narration stays dominant. Per-scene source-audio controls are available in the inspector; this screen controls project-wide mix targets.", `<button class="button" data-action="save-audio">Save source audio</button>`)}
+    <div class="grid two"><section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Project mix</p><h2 class="card-title">Level hierarchy</h2></div><span class="status-tag ready">Balanced</span></div>${rows.map(([label, id, note]) => `<div class="audio-level"><div><b>${label}</b><div class="tiny subtle">${note}</div></div><input type="range" min="0" max="100" value="${state.audioState[id]}" data-setting="audio-${id}" /><output>${state.audioState[id]}%</output></div>`).join("")}</section><section class="card card-pad"><p class="eyebrow">Source Audio defaults</p><h2 class="card-title">Flow ambience under narration</h2><div class="form-stack" style="margin-top:17px"><div class="form-row"><div><label class="field-label">Default mode</label><select class="select-input" data-setting="audio-source-mode">${optionList(["background", "mute", "full"], state.audioState.sourceMode)}</select></div><div><label class="field-label">Default volume</label><select class="select-input" data-setting="audio-source-volume">${optionList([15, 30, 50].map(value => ({id: value, label: `${value}%`})), state.audioState.source)}</select></div></div><div class="toggle-row"><span>Duck under narration</span><button class="switch ${state.audioState.sourceDuck ? "on" : ""}" data-action="toggle-project-source-duck"></button></div><p class="caption">This policy is saved to every current scene and becomes the default for the next render.</p></div></section></div></section>`;
 }
 
 function renderRender() {
@@ -419,7 +431,7 @@ function renderRender() {
   const hasPreview = state.workflowState.previewReady;
   const isRendering = renderPollTimer !== null;
   const canRenderFinal = canRender && state.workflowState.previewApproved && !state.reviewState.dirty && !isRendering;
-  const playableUrl = state.workflowState.finalReady ? `${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/render/final` : hasPreview ? `${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/render/preview` : null;
+  const playableUrl = render.videoUrl || (state.workflowState.finalReady ? `${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/render/final?t=${Date.now()}` : hasPreview ? `${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/render/preview?t=${Date.now()}` : null);
   return `<section class="screen">${screenHeader("Render", canRender ? "Create a preview with local OmniVoice narration. Watch and approve it before rendering the final video." : "Rendering is locked until you approve scene-by-scene script mapping and manual voice settings.", `<button class="button-quiet" data-nav="${hasPreview ? "scenes" : !state.workflowState.scriptApproved ? "script" : "voice"}">${hasPreview ? "Open Final Review" : !state.workflowState.scriptApproved ? "Review Script" : "Review Voice"}</button><button class="button-secondary" data-action="start-render" data-quality="preview" ${canRender && !isRendering ? "" : "disabled"}>Render Preview</button><button class="button" data-action="start-render" data-quality="final" ${canRenderFinal ? "" : "disabled"}>Render Final</button>`)}
     <div class="render-layout"><section class="card card-pad"><p class="eyebrow">Review player</p>${playableUrl ? `<video controls preload="metadata" style="display:block;max-height:480px;max-width:100%;margin:12px auto" src="${playableUrl}"></video>` : `<div class="video-player" data-project-title="${escapeHtml(activeProject().name)}"><span class="player-play">▶</span></div>`}<div style="display:flex;justify-content:space-between;margin-top:12px"><span class="caption">${kept} scenes · ${formatTime(projectDuration())} · ${activeProject().aspect} · ${activeProject().fps}fps · H.264</span><div><button class="button-secondary" data-nav="scenes" ${hasPreview ? "" : "disabled"}>Basic edits</button>${state.workflowState.finalReady ? `<a class="button-secondary" href="${STUDIO_API}/projects/${encodeURIComponent(state.projectState.id)}/render/final" download="${escapeHtml(state.projectState.id)}-final.mp4">Download final MP4</a>` : `<button class="button-quiet" data-action="approve-export" ${hasPreview && !state.reviewState.dirty && !state.workflowState.previewApproved ? "" : "disabled"}>${state.workflowState.previewApproved ? "Preview approved" : "Approve preview"}</button>`}</div></div></section><section class="card card-pad"><div class="card-head"><div><p class="eyebrow">Render progress</p><h2 class="card-title">${escapeHtml(render.status)}</h2></div><span class="caption">${render.progress}%</span></div><label class="field-label" style="margin:12px 0 6px">OmniVoice quality for next preview</label><select class="select-input" data-setting="render-voice-steps" ${isRendering ? "disabled" : ""}><option value="4" ${render.voiceSteps === 4 ? "selected" : ""}>Fast · 4 steps</option><option value="8" ${render.voiceSteps === 8 ? "selected" : ""}>Balanced · 8 steps</option><option value="16" ${render.voiceSteps === 16 ? "selected" : ""}>Detailed · 16 steps</option></select><p class="caption" style="margin:6px 0 12px">Final render reuses the narration you approved in the preview.</p><div class="progress-track"><i style="width:${render.progress}%"></i></div>${render.error ? `<p class="warning" style="margin-top:12px">${escapeHtml(render.error)}</p>` : ""}<div class="progress-steps">${steps.map((step, index) => `<div class="progress-step ${index < render.activeStep ? "done" : index === render.activeStep ? "active" : ""}"><span class="progress-dot">${index < render.activeStep ? "✓" : index + 1}</span><div><b>${step}</b><span>${index < render.activeStep ? "Done" : index === render.activeStep ? "Working…" : "Waiting"}</span></div><span class="tiny subtle">${index === 1 ? "Voice" : index === 4 ? "Remotion" : index === 5 ? "FFmpeg" : ""}</span></div>`).join("")}</div></section></div>
     <section class="card card-pad" style="margin-top:16px"><div class="card-head"><div><p class="eyebrow">Request changes</p><h2 class="card-title">Send a precise revision back through the project</h2></div></div><div class="form-row three"><div><label class="field-label">Scene</label><select class="select-input" data-setting="request-scene">${optionList(state.sceneState.items.map(scene => ({ id: scene.id, label: `Scene ${String(scene.number).padStart(2, "0")} · ${scene.title}` })), render.requestScene)}</select></div><div><label class="field-label">Change type</label><select class="select-input" data-setting="request-category">${optionList(["Source", "Trim", "Speed", "Crop", "Audio", "Transition", "Subtitle", "Voice Timing", "Voice Override"], render.requestCategory)}</select></div><div><label class="field-label">Action</label><button class="button-secondary" style="width:100%" data-action="apply-changes">Apply Changes</button></div></div><textarea id="change-comment" class="textarea-input compact-textarea" style="margin-top:10px" placeholder="Describe the correction for this scene…"></textarea></section>
@@ -706,6 +718,8 @@ async function startRender(quality) {
   if (!keptScenes().length) { toast("Keep at least one scene before rendering.", "warning"); return; }
   if (renderPollTimer) { toast("A render is already running.", "warning"); return; }
   try {
+    await projectWriteQueue;
+    if (projectWriteError) throw projectWriteError;
     const job = await apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/render`, {
       method: "POST", body: JSON.stringify({ quality, voice_steps: state.renderState.voiceSteps }),
     });
@@ -755,9 +769,23 @@ function setBackendVideoStatus(status, sceneId = currentScene()?.id) {
 function persistSceneEdit(action, extra = {}) {
   const scene = currentScene();
   if (!backendOnline || !scene?.sourceVersion) return;
-  apiRequest(`/projects/${encodeURIComponent(state.projectState.id)}/scenes/${encodeURIComponent(scene.id)}/video/edit`, { method: "POST", body: JSON.stringify({ version: scene.sourceVersion, action, ...extra }) })
-    .then(() => loadBackendProject(state.projectState.id))
-    .catch(error => toast(error.message, "warning"));
+  const projectId = state.projectState.id;
+  const sceneId = scene.id;
+  const version = scene.sourceVersion;
+  const operation = projectWriteQueue.then(() => apiRequest(`/projects/${encodeURIComponent(projectId)}/scenes/${encodeURIComponent(sceneId)}/video/edit`, { method: "POST", body: JSON.stringify({ version, action, ...extra }) }));
+  projectWriteQueue = operation.then(result => { projectWriteError = null; return result; }).catch(error => { projectWriteError = error; toast(error.message, "warning"); });
+  return operation;
+}
+
+function saveProjectAudio() {
+  if (!backendOnline) { toast("Start the local studio server before saving audio.", "warning"); return; }
+  const projectId = state.projectState.id;
+  const payload = { source_mode: state.audioState.sourceMode, source_volume: state.audioState.source / 100, source_duck: state.audioState.sourceDuck };
+  state.sceneState.items.forEach(scene => { scene.sourceAudio.mode = payload.source_mode; scene.sourceAudio.volume = state.audioState.source; scene.sourceAudio.duck = payload.source_duck; });
+  markReviewDirty();
+  const operation = projectWriteQueue.then(() => apiRequest(`/projects/${encodeURIComponent(projectId)}/audio`, { method: "POST", body: JSON.stringify(payload) }));
+  projectWriteQueue = operation.then(result => { projectWriteError = null; toast("Source audio saved for every scene.", "success"); return result; }).catch(error => { projectWriteError = error; toast(error.message, "warning"); });
+  return operation;
 }
 
 function cropCoordinates(position) {
@@ -793,6 +821,7 @@ document.addEventListener("click", event => {
     case "replace-source": if (backendOnline) { state.uiState.screen = "import"; toast("Import a replacement ZIP or folder; existing versions remain available."); renderScreen(); } else { currentScene().source = "Google Flow"; currentScene().sourceVersion += 1; currentScene().status = "pending"; toast("Source replacement queued (mock).", "warning"); renderScreen(); } break;
     case "toggle-hold": currentScene().edit.holdLastFrame = !currentScene().edit.holdLastFrame; persistSceneEdit("hold_last_frame", { enabled: currentScene().edit.holdLastFrame }); markReviewDirty(); savePulse("Video edit changed"); renderInspector(); break;
     case "toggle-duck": currentScene().sourceAudio.duck = !currentScene().sourceAudio.duck; persistSceneEdit("source_audio", { mode: currentScene().sourceAudio.mode, volume: currentScene().sourceAudio.volume / 100, duck: currentScene().sourceAudio.duck, fade_in: currentScene().sourceAudio.fadeIn, fade_out: currentScene().sourceAudio.fadeOut }); markReviewDirty(); savePulse("Source audio changed"); renderInspector(); break;
+    case "toggle-project-source-duck": state.audioState.sourceDuck = !state.audioState.sourceDuck; saveProjectAudio(); renderScreen(); break;
     case "toggle-voice-override": currentScene().voiceOverride = currentScene().voiceOverride ? null : { language: state.voiceState.language, speed: state.voiceState.speed }; renderInspector(); break;
     case "voice-mode": state.voiceState.mode = target.dataset.mode; markVoiceChanged(); break;
     case "voice-gender": state.voiceState.gender = target.dataset.value; markVoiceChanged(); break;
@@ -817,7 +846,8 @@ document.addEventListener("click", event => {
     case "update-timing": state.voiceState.subtitleSync = "SYNCED"; toast("Subtitle timing updated (mock)."); renderScreen(); break;
     case "toggle-subtitle-highlight": state.subtitleState.highlight = !state.subtitleState.highlight; renderScreen(); break;
     case "toggle-safe-zone": state.subtitleState.safeZone = !state.subtitleState.safeZone; renderScreen(); break;
-    case "save-subtitles": case "save-audio": toast("Preset saved to prototype state."); savePulse(); break;
+    case "save-subtitles": toast("Subtitle preset saved to prototype state."); savePulse(); break;
+    case "save-audio": saveProjectAudio(); break;
     case "start-render": startRender(target.dataset.quality); break;
     case "rerender-preview": startRender("preview"); break;
     case "approve-export": approveRenderedPreview(); break;
@@ -839,7 +869,9 @@ document.addEventListener("change", event => {
   if (setting === "preview-text") { state.voiceState.previewText = target.value; }
   if (setting === "subtitle-language") { state.subtitleState.language = target.value; }
   if (setting === "subtitle-size") { state.subtitleState.size = Number(target.value); }
-  if (setting?.startsWith("audio-")) { const key = setting.replace("audio-", ""); state.audioState[key] = Number(target.value); renderScreen(); }
+  if (setting === "audio-source-mode") { state.audioState.sourceMode = target.value; saveProjectAudio(); renderScreen(); }
+  else if (setting === "audio-source-volume") { state.audioState.source = Number(target.value); saveProjectAudio(); renderScreen(); }
+  else if (setting?.startsWith("audio-")) { const key = setting.replace("audio-", ""); state.audioState[key] = Number(target.value); if (key === "source") saveProjectAudio(); renderScreen(); }
   if (setting === "request-scene") state.renderState.requestScene = target.value;
   if (setting === "render-voice-steps") state.renderState.voiceSteps = Number(target.value);
   if (setting === "request-category") state.renderState.requestCategory = target.value;

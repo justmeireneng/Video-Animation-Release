@@ -246,6 +246,45 @@ class SceneVideoStore:
         self._sync_remotion(scene_id, metadata)
         return record
 
+    def set_all_source_audio(self, mode: str, volume: float | None = None,
+                             duck: bool | None = None, fade_in: float | None = None,
+                             fade_out: float | None = None) -> list[dict[str, Any]]:
+        """Apply one source-audio policy to every active scene atomically."""
+
+        project = self._project()
+        updated: list[dict[str, Any]] = []
+        for scene in project.get("scenes", []):
+            scene_id = str(scene.get("id", ""))
+            metadata_path = self.metadata_path(scene_id)
+            if not scene_id or not metadata_path.is_file():
+                continue
+            metadata = self.load_metadata(scene_id)
+            version = int(metadata.get("active_version") or 0)
+            if not version:
+                continue
+            record = self._version(metadata, version)
+            has_audio = bool((record.get("probe") or {}).get("has_audio"))
+            if has_audio:
+                record["source_audio"] = AudioPolicyService.update(
+                    record["source_audio"], mode=mode, volume=volume, duck=duck,
+                    fade_in=fade_in, fade_out=fade_out,
+                )
+            else:
+                record["source_audio"] = AudioPolicyService.defaults(False)
+            self._select(metadata, record)
+            _write_json(metadata_path, metadata)
+            self._apply_metadata_to_scene(scene, metadata)
+            updated.append(record)
+
+        default_policy = AudioPolicyService.update(
+            AudioPolicyService.defaults(True), mode=mode, volume=volume, duck=duck,
+            fade_in=fade_in, fade_out=fade_out,
+        )
+        settings = project.setdefault("sourceVideoSettings", {"auto_approve_latest": False})
+        settings["source_audio_default"] = default_policy
+        _write_json(self.remotion_path, project)
+        return updated
+
     def set_playback_speed(self, scene_id: str, version: int, speed: float) -> dict[str, Any]:
         """Set a non-destructive source-video speed in the supported 0.5–2x range."""
 

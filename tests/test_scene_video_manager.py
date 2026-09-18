@@ -100,6 +100,19 @@ class TestSceneVideoStore(unittest.TestCase):
         self.assertEqual(full["source_audio"]["volume"], 0.6)
         self.assertFalse(full["source_audio"]["duck_under_narration"])
 
+    def test_project_source_audio_policy_mutes_current_scenes_and_render_projection(self):
+        self.store.import_video("scene_01", self.source)
+        self.store.approve("scene_01", 1)
+        updated = self.store.set_all_source_audio("mute", 0.3, True)
+        self.assertEqual(len(updated), 1)
+        self.assertEqual(updated[0]["source_audio"]["mode"], "mute")
+        self.assertFalse(updated[0]["source_audio"]["enabled"])
+        project = json.loads(self.store.remotion_path.read_text(encoding="utf-8"))
+        projected = project["scenes"][0]["videoSources"][0]["sourceAudio"]
+        self.assertEqual(projected["mode"], "mute")
+        self.assertFalse(projected["enabled"])
+        self.assertEqual(project["sourceVideoSettings"]["source_audio_default"]["mode"], "mute")
+
     def test_manual_speed_and_hold_are_non_destructive_and_projected(self):
         self.store.import_video("scene_01", self.source)
         edited = self.store.set_playback_speed("scene_01", 1, 1.75)
