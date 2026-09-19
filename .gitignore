@@ -67,6 +67,12 @@ projects/*/source/imported/*.zip
 projects/*/source/imported/*.uploading
 projects/*/scenes/*/source/*
 
+# Local agent/studio project workspaces are runtime data, not source changes.
+# Keep the checked-in sample projects above, but do not surface personal
+# Atlantic/test workspaces or the nested local export in Git clients.
+projects/atlantic/
+Video Animation Release/
+
 # OS / IDE generated files
 .DS_Store
 Thumbs.db
