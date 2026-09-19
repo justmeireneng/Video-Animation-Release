@@ -9,6 +9,7 @@ import queue
 import subprocess
 import tempfile
 import threading
+import subprocess
 from pathlib import Path
 from typing import Any
 
@@ -50,17 +51,48 @@ class OmniVoiceProvider(VoiceProvider):
     _warm_worker_key: tuple[str, ...] | None = None
     _warm_worker_timer: threading.Timer | None = None
     _warm_worker_lock = threading.Lock()
+    _detected_devices: dict[str, str] = {}
 
-    def __init__(self, model_id: str = "k2-fsa/OmniVoice", device: str = "cpu",
+    def __init__(self, model_id: str = "k2-fsa/OmniVoice", device: str = "auto",
                  runtime_python: Path | str | None = None, model_path: Path | str | None = None,
                  runner_path: Path | str | None = None):
         self.model_id = model_id
-        self.device = device
         self.repo_root = Path(__file__).resolve().parents[3]
         self.runtime_python = Path(runtime_python) if runtime_python else self._default_runtime()
         self.model_path = Path(model_path) if model_path else self._default_model_path()
         self.runner_path = Path(runner_path) if runner_path else self.repo_root / "scripts" / "omnivoice_infer.py"
+        self.device = self._detect_device(device)
         self.last_metrics: dict[str, Any] | None = None
+
+    def _detect_device(self, requested: str) -> str:
+        """Use a real runtime CUDA probe when auto mode is requested.
+
+        OmniVoice's runner currently exposes CPU and CUDA device mapping and
+        always uses fp16; bf16/int8/quantized paths are intentionally not
+        advertised until the upstream runtime supports them.
+        """
+        if requested and requested not in {"auto", "default"}:
+            return requested
+        configured = os.environ.get("OMNIVOICE_DEVICE")
+        if configured:
+            return configured
+        key = str(self.runtime_python.resolve())
+        if key in type(self)._detected_devices:
+            return type(self)._detected_devices[key]
+        detected = "cpu"
+        if self.runtime_python.is_file():
+            try:
+                result = subprocess.run(
+                    [str(self.runtime_python), "-c", "import torch; print('cuda' if torch.cuda.is_available() else 'cpu')"],
+                    capture_output=True, text=True, timeout=10, check=False,
+                )
+                candidate = result.stdout.strip().splitlines()[-1] if result.stdout.strip() else "cpu"
+                if candidate == "cuda":
+                    detected = "cuda"
+            except (OSError, subprocess.SubprocessError):
+                detected = "cpu"
+        type(self)._detected_devices[key] = detected
+        return detected
 
     def _default_runtime(self) -> Path:
         configured = os.environ.get("OMNIVOICE_PYTHON")
@@ -121,6 +153,8 @@ class OmniVoiceProvider(VoiceProvider):
             "provider": self.provider_id, "model_id": self.model_id, "model_path": str(self.model_path),
             "device": self.device, "runtime_backend": "omnivoice_local", "detail": resource_error or memory_detail,
             "memory": memory, "warm_worker": self._worker_is_alive(),
+            "optimizations": {"fp16": True, "bf16": False, "int8": False, "quantization": False,
+                               "batching": False, "chunked_inference": False, "lazy_loading": True},
         }
 
     def capabilities(self) -> dict[str, Any]:

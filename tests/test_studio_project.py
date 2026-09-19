@@ -203,6 +203,7 @@ class TestStudioProject(unittest.TestCase):
              patch.object(app, "_validate_voice_capacity"), \
              patch("src.services.render_service.RemotionRenderer.render", autospec=True, side_effect=render), \
              patch("src.services.render_service.FFmpegFinalizer.finalize", autospec=True, side_effect=finalize), \
+             patch("src.services.render_service.FFmpegFinalizer.normalize_pixel_format", autospec=True, side_effect=lambda _finalizer, path, *, quality: path), \
              patch("src.services.render_service.RenderService._validate_output", autospec=True, return_value={"passed": True}):
             app.start_render(self.project_id, "preview")
             deadline = time.monotonic() + 5

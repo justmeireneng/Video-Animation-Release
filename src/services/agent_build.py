@@ -12,12 +12,10 @@ from pathlib import Path
 from typing import Any
 
 from src.services.import_service import ImportService
-from src.services.narration_timeline import NarrationTimelineService
-from src.services.project_state import ProjectStateService
 from src.services.render_service import RenderService
 from src.services.script_service import ScriptService
 from src.services.studio_project import LocalProjectManager, slugify_project_name
-from src.services.voice_service import DEFAULT_VOICE_MODE
+from src.services.voice_stage import VoiceGenerationStage
 from src.video.scene_source_manager import SceneVideoStore
 
 
@@ -150,7 +148,12 @@ class AgentBuildService:
     def _readiness(project_id: str, repo_root: Path) -> list[dict[str, Any]]:
         return ScriptService(repo_root, project_id).validation()
 
-    def build(self, *, zip_path: Path | str, script_path: Path | str, project_name: str, config_path: Path | str | None = None) -> dict[str, Any]:
+    def build(
+        self, *, zip_path: Path | str, script_path: Path | str, project_name: str,
+        config_path: Path | str | None = None, use_existing_voice: bool = False,
+        skip_voice: bool = False, voice_timeout_seconds: float = 20 * 60,
+        voice_num_step: int | None = None, on_progress: Any = print,
+    ) -> dict[str, Any]:
         started = time.perf_counter()
         project_id, _ = self._ensure_project(project_name)
         project_root = self.projects.paths(project_id).root
@@ -179,22 +182,49 @@ class AgentBuildService:
             warnings.extend(self._apply_config(project_id, config))
             ScriptService(self.repo_root, project_id).approve_mapping()
             report["stages"]["validation"] = {"status": "ok", "scenes": readiness}
-            narration = NarrationTimelineService(self.repo_root, project_id).prepare(synthesize=True)
-            report["stages"]["voice_subtitles"] = {"status": "ok", "provider": narration["voice_provider"], "scenes": narration["scenes"], "duration": narration["total_narration_duration"]}
+            effective_steps = voice_num_step or int((self.projects.load(project_id).get("voice") or {}).get("num_step", 4))
+            config_timeout = config.get("voice_timeout_seconds")
+            if config_timeout is None and isinstance(config.get("voice"), dict):
+                config_timeout = config["voice"].get("timeout_seconds")
+            effective_timeout = float(config_timeout) if config_timeout is not None else voice_timeout_seconds
+            voice = VoiceGenerationStage(self.repo_root, project_id).run(
+                use_existing_voice=use_existing_voice,
+                skip_voice=skip_voice,
+                num_step=effective_steps,
+                timeout_seconds=effective_timeout,
+                on_progress=on_progress,
+            )
+            report["stages"]["voice"] = voice
+            report["stages"]["subtitles"] = {"status": "ok", "source": "narration", "scene_count": len(voice.get("scenes", []))}
             render = RenderService(self.repo_root, project_id)
             preview = render.render_preview()
             report["stages"]["preview"] = {"status": "ok", "path": str(preview)}
             render.approve_preview()
             final = render.render_final()
             report["stages"]["final"] = {"status": "ok", "path": str(final)}
-            report["status"] = "success"
+            report["status"] = "PARTIAL_PASS" if (skip_voice or use_existing_voice) else "FULL_PASS"
         except Exception as exc:
             errors.append(str(exc))
             report["status"] = "failed"
             report["stages"].setdefault("failure", {"status": "error"})
         report["render_time_seconds"] = round(time.perf_counter() - started, 3)
         manifest = self.projects.load(project_id)
-        report["voice"] = {"provider": manifest.get("voice", {}).get("provider", "omnivoice"), "language": manifest.get("voice", {}).get("language", "vi"), "speed": manifest.get("voice", {}).get("speed", 1.10)}
+        voice_stage = report["stages"].get("voice") or {}
+        provider = voice_stage.get("provider") or {}
+        provider_meta = provider if isinstance(provider, dict) else {}
+        scene_reports = voice_stage.get("scenes") or []
+        report["voice"] = {
+            "status": voice_stage.get("status", "NOT_RUN"),
+            "provider": manifest.get("voice", {}).get("provider", "omnivoice"),
+            "language": manifest.get("voice", {}).get("language", "vi"),
+            "speed": manifest.get("voice", {}).get("speed", 1.10),
+            "device": provider_meta.get("device") or (scene_reports[0].get("device") if scene_reports else None),
+            "cache_hits": sum(1 for item in scene_reports if (item.get("voice") or {}).get("cache_hit")),
+            "scene_count": len(scene_reports),
+            "resume_capable": True,
+            "remote_ready": True,
+        }
+        report["scene_count"] = len((report.get("stages", {}).get("validation") or {}).get("scenes", [])) or len((report.get("stages", {}).get("import") or {}).get("mapped_scenes", []))
         report["outputs"] = {"preview": str(project_root / "render/preview/preview.mp4"), "final": str(project_root / "render/final/final.mp4"), "report": str(report_path)}
         validation_dir = project_root / "metadata" / "logs"
         validations: dict[str, Any] = {}
@@ -211,6 +241,7 @@ class AgentBuildService:
             "final": {"width": 1080, "height": 1920, "fps": 30},
         }
         report["source_audio"] = manifest.get("audio", {})
+        report["overall"] = report.get("status", "FAILED")
         report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         if errors:
             raise AgentBuildError(f"Build failed. See {report_path}: {errors[-1]}")

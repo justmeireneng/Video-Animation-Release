@@ -90,6 +90,31 @@ class FFmpegFinalizer:
             raise RuntimeError(f"FFmpeg finalization failed: {(completed.stderr or '').strip()[-500:]}")
         return output
 
+    def normalize_pixel_format(self, source: Path, *, quality: str) -> Path:
+        """Normalize full-range yuvj420p from some Remotion ffmpeg builds.
+
+        This is a same-resolution colorspace/pixel-format transcode only; it
+        never applies a scale filter or changes the composition dimensions.
+        """
+        actual = probe_video(source, self.repo_root)
+        if actual.get("pixel_format") == "yuv420p":
+            return source
+        preset = RENDER_PRESETS[quality]
+        temporary = source.with_name(source.stem + ".yuv420p.tmp.mp4")
+        completed = subprocess.run([
+            str(self._ffmpeg()), "-y", "-loglevel", "error", "-i", str(source),
+            "-map", "0:v:0", "-map", "0:a:0?", "-vf", "format=yuv420p", "-color_range", "tv",
+            "-c:v", "libx264", "-pix_fmt", "yuv420p",
+            "-b:v", preset["video_bitrate"], "-maxrate", preset["max_rate"],
+            "-bufsize", preset["buffer_size"], "-preset", preset["x264_preset"],
+            "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-movflags", "+faststart", str(temporary),
+        ], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+        if completed.returncode != 0:
+            temporary.unlink(missing_ok=True)
+            raise RuntimeError(f"FFmpeg pixel-format normalization failed: {(completed.stderr or '').strip()[-500:]}")
+        temporary.replace(source)
+        return source
+
 
 class RenderService:
     def __init__(self, repo_root: Path | str, project_name: str):
@@ -224,6 +249,7 @@ class RenderService:
             self.renderer.render(self.project_name, output, preview=True)
             if not output.is_file() or output.stat().st_size == 0:
                 raise RuntimeError("Preview renderer did not create a video file.")
+            self.finalizer.normalize_pixel_format(output, quality="preview")
             self._validate_output(output, "preview", "preview")
         except Exception:
             self.state.set("NEEDS_CHANGES", "preview render failed")
@@ -251,6 +277,7 @@ class RenderService:
         self.state.set("RENDERING", "final")
         try:
             self.renderer.render(self.project_name, intermediate, preview=False)
+            self.finalizer.normalize_pixel_format(intermediate, quality="final")
             self._validate_output(intermediate, "final", "final-remotion")
             self.finalizer.finalize(intermediate, output)
             if not output.is_file() or output.stat().st_size == 0:

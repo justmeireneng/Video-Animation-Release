@@ -211,6 +211,10 @@ def main():
     build_video.add_argument("--script", dest="script_path", required=True, help="SCENE/Narration TXT script")
     build_video.add_argument("--project", dest="project_name", required=True, help="Project id or display name")
     build_video.add_argument("--config", dest="config_path", help="Optional project_config.json")
+    build_video.add_argument("--use-existing-voice", action="store_true", help="TEST ONLY: reuse existing per-scene WAV files; never call OmniVoice")
+    build_video.add_argument("--skip-voice", action="store_true", help="TEST ONLY: create silent WAVs; report is PARTIAL_PASS, never FULL_PASS")
+    build_video.add_argument("--voice-timeout-seconds", type=float, default=20 * 60, help="Voice-stage warning threshold; long CPU inference is not killed early")
+    build_video.add_argument("--voice-num-step", type=int, choices=[4, 8, 16], help="OmniVoice diffusion steps; default is 4 for the current CPU target")
 
     import_video = subparsers.add_parser("import-scene-video", help="Import a new immutable source-video version")
     import_video.add_argument("project_name")
@@ -373,6 +377,10 @@ def main():
                 script_path=args.script_path,
                 project_name=args.project_name,
                 config_path=args.config_path,
+                use_existing_voice=args.use_existing_voice,
+                skip_voice=args.skip_voice,
+                voice_timeout_seconds=args.voice_timeout_seconds,
+                voice_num_step=args.voice_num_step,
             )
         except AgentBuildError as exc:
             print(f"BUILD FAILED: {exc}", file=sys.stderr)

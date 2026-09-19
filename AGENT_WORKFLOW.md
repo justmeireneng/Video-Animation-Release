@@ -16,6 +16,12 @@ python app.py build-video --zip .\source.zip --script .\script.txt --project my-
 
 The command creates or resumes `projects/<project>/`, discovers and numerically sorts scenes, probes every source with ffprobe, keeps duplicate versions, maps the script, approves the first readable source version by default, generates OmniVoice narration and subtitle timing, applies scene settings, renders a 720x1280 preview, then renders and masters a 1080x1920 final MP4 with FFmpeg. Both outputs are validated from real ffprobe metadata.
 
+Voice is an explicit resumable stage. It logs per-scene progress under
+`metadata/logs/voice-progress.json` and caches each scene WAV. A rerun reuses matching
+cache entries instead of regenerating earlier scenes. The default CPU-safe OmniVoice setting
+is 4 steps; use `--voice-num-step 8` or `16` only when the machine can sustain it. CPU runs
+emit a warning but are allowed to continue.
+
 ## Output
 
 - `projects/<project>/render/preview/preview.mp4`
@@ -37,6 +43,10 @@ python app.py render-video my-project
 ```
 
 Voice preview is available with `python app.py voice-preview <project>`. OmniVoice is the only active provider; VoiceStudio is not installed, started, or called.
+
+For pipeline-only diagnostics, `--use-existing-voice` reuses complete per-scene WAVs and
+`--skip-voice` creates silent WAVs. Both flags are test-only; `--skip-voice` is reported as
+`PARTIAL_PASS` and the normal command never falls back to mock audio.
 
 ## Error handling
 
