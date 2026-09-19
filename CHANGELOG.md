@@ -9,13 +9,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Agent-first `build-video` workflow: ZIP + script + optional config now runs import, validation,
+  numeric scene mapping, OmniVoice, subtitles, Remotion, FFmpeg, and ffprobe output checks without
+  the desktop UI; `AGENT_WORKFLOW.md` documents the command and `build_report.json` contract.
 - ZIP-first Google Flow manual import for ZIP/folders, robust scene parsing and numeric sort,
   ffprobe validation, immutable `flow_vN.mp4` versions, duplicate/missing/invalid reports, and
   explicit project workflow state.
 - Per-scene source review UI and CLI controls for approve/reject/rollback, trim, cover/contain
   focal crop, source-audio mute/background/full, volume/ducking/fades, transition, and subtitle
   vertical offset.
-- Fast 540x960 preview rendering plus Remotion-to-FFmpeg final mastering at 1080x1920/30fps.
+- Validated 720x1280/30fps preview rendering plus Remotion-to-FFmpeg final mastering at
+  1080x1920/30fps, with ffprobe checks against the real MP4 metadata.
 - Bundled Be Vietnam Pro font files for deterministic Vietnamese subtitle glyph coverage.
 - JSON-driven Remotion 4.0.523 composition runtime with four vertical layouts, deterministic
   animation presets, focal-point motion, mascot fallback, phrase subtitles, narration, SFX,

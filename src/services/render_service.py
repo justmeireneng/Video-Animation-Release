@@ -6,7 +6,21 @@ import json
 from pathlib import Path
 
 from src.services.project_state import ProjectStateService
-from src.video.scene_source_manager import find_ffprobe
+from src.video.scene_source_manager import find_ffprobe, probe_video
+
+
+RENDER_PRESETS = {
+    "preview": {
+        "width": 720, "height": 1280, "fps": 30,
+        "video_bitrate": "5M", "min_video_bitrate": 4_000_000, "max_video_bitrate": 6_000_000,
+        "max_rate": "6M", "buffer_size": "10M", "x264_preset": "faster",
+    },
+    "final": {
+        "width": 1080, "height": 1920, "fps": 30,
+        "video_bitrate": "10M", "min_video_bitrate": 8_000_000, "max_video_bitrate": 16_000_000,
+        "max_rate": "12M", "buffer_size": "20M", "x264_preset": "medium",
+    },
+}
 
 
 class RemotionRenderer:
@@ -26,18 +40,19 @@ class RemotionRenderer:
         except ValueError as exc:
             raise ValueError("Render output must stay inside its project directory.") from exc
         relative_output = Path("..") / "projects" / project_name / output_relative_to_project
+        preset = RENDER_PRESETS["preview" if preview else "final"]
         command = [
             node, str(cli), "render", "src/index.ts",
             "TikTokExplainer", relative_output.as_posix(), f"--props={props.as_posix()}",
-            "--codec=h264", f"--crf={30 if preview else 23}", "--concurrency=1" if preview else "--concurrency=25%",
+            "--codec=h264", "--audio-codec=aac", "--audio-bitrate=192k", "--pixel-format=yuv420p",
+            f"--width={preset['width']}", f"--height={preset['height']}", f"--fps={preset['fps']}",
+            f"--video-bitrate={preset['video_bitrate']}", f"--max-rate={preset['max_rate']}",
+            f"--buffer-size={preset['buffer_size']}", f"--x264-preset={preset['x264_preset']}",
+            "--concurrency=1" if preview else "--concurrency=25%",
             "--media-cache-size-in-bytes=251658240",
             "--offthreadvideo-cache-size-in-bytes=268435456",
             "--offthreadvideo-video-threads=1",
         ]
-        if preview:
-            # 432x768 keeps captions readable while reducing pixel work on
-            # the four-thread, low-memory target machine.
-            command.append("--scale=0.4")
         output.parent.mkdir(parents=True, exist_ok=True)
         log_path = project_root / "metadata" / "logs" / f"remotion-{'preview' if preview else 'final'}.log"
         log_path.parent.mkdir(parents=True, exist_ok=True)
@@ -132,10 +147,12 @@ class RenderService:
             raise RuntimeError("Render is blocked until: " + "; ".join(missing))
         return manifest
 
-    def _prepare_render_config(self, manifest: dict) -> None:
+    def _prepare_render_config(self, manifest: dict, quality: str) -> None:
         if not self._is_desktop_project():
             return
+        preset = RENDER_PRESETS[quality]
         source = json.loads((self.project_root / "remotion.json").read_text(encoding="utf-8"))
+        source.update({"width": preset["width"], "height": preset["height"], "fps": preset["fps"]})
         decisions = (manifest.get("render") or {}).get("scene_decisions") or {}
         source["scenes"] = [scene for scene in source.get("scenes", []) if decisions.get(scene.get("id")) != "cut"]
         render_root = self.project_root / "render"
@@ -144,6 +161,42 @@ class RenderService:
         (render_root / "render-props.json").write_text(
             json.dumps({"projectSlug": self.project_name, "configFile": "render/render-remotion.json"}) + "\n", encoding="utf-8",
         )
+
+    def _validate_output(self, path: Path, quality: str, stage: str) -> dict:
+        """Fail a render whose real ffprobe metadata does not match its preset."""
+        preset = RENDER_PRESETS[quality]
+        actual = probe_video(path, self.repo_root)
+        errors: list[str] = []
+        if (actual["width"], actual["height"]) != (preset["width"], preset["height"]):
+            errors.append(
+                f"resolution {actual['width']}x{actual['height']} != {preset['width']}x{preset['height']}"
+            )
+        if abs(float(actual["fps"]) - preset["fps"]) > 0.01:
+            errors.append(f"fps {actual['fps']} != {preset['fps']}")
+        if actual["codec"] != "h264":
+            errors.append(f"video codec {actual['codec']} != h264")
+        if actual["pixel_format"] != "yuv420p":
+            errors.append(f"pixel format {actual['pixel_format']} != yuv420p")
+        if not actual["has_audio"] or actual["audio_codec"] != "aac":
+            errors.append(f"audio codec {actual['audio_codec'] or 'missing'} != aac")
+        bitrate = int(actual.get("video_bitrate") or 0)
+        warnings: list[str] = []
+        if bitrate and not preset["min_video_bitrate"] <= bitrate <= preset["max_video_bitrate"]:
+            warnings.append(
+                f"video bitrate {bitrate} is outside recommended "
+                f"{preset['min_video_bitrate']}–{preset['max_video_bitrate']} bps"
+            )
+        report = {
+            "quality": quality, "stage": stage, "path": str(path),
+            "expected": {key: preset[key] for key in ("width", "height", "fps", "video_bitrate")},
+            "actual": actual, "passed": not errors, "errors": errors, "warnings": warnings,
+        }
+        report_path = self.project_root / "metadata" / "logs" / f"render-validation-{stage}.json"
+        report_path.parent.mkdir(parents=True, exist_ok=True)
+        report_path.write_text(json.dumps(report, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+        if errors:
+            raise RuntimeError(f"{quality.capitalize()} output validation failed: " + "; ".join(errors))
+        return report
 
     def approve_preview(self) -> dict:
         """Record the creator's review decision before a full final render."""
@@ -164,13 +217,14 @@ class RenderService:
 
     def render_preview(self) -> Path:
         manifest = self._preflight(final=False)
-        self._prepare_render_config(manifest)
+        self._prepare_render_config(manifest, "preview")
         output = self.project_root / ("render/preview/preview.mp4" if self._is_desktop_project() else "output/preview.mp4")
         self.state.set("RENDERING", "preview")
         try:
             self.renderer.render(self.project_name, output, preview=True)
             if not output.is_file() or output.stat().st_size == 0:
                 raise RuntimeError("Preview renderer did not create a video file.")
+            self._validate_output(output, "preview", "preview")
         except Exception:
             self.state.set("NEEDS_CHANGES", "preview render failed")
             raise
@@ -187,7 +241,7 @@ class RenderService:
 
     def render_final(self) -> Path:
         manifest = self._preflight(final=True)
-        self._prepare_render_config(manifest)
+        self._prepare_render_config(manifest, "final")
         if self._is_desktop_project():
             intermediate = self.project_root / "render" / "final" / "final_remotion.mp4"
             output = self.project_root / "render" / "final" / "final.mp4"
@@ -197,9 +251,11 @@ class RenderService:
         self.state.set("RENDERING", "final")
         try:
             self.renderer.render(self.project_name, intermediate, preview=False)
+            self._validate_output(intermediate, "final", "final-remotion")
             self.finalizer.finalize(intermediate, output)
             if not output.is_file() or output.stat().st_size == 0:
                 raise RuntimeError("Finalizer did not create a video file.")
+            self._validate_output(output, "final", "final")
         except Exception:
             self.state.set("NEEDS_CHANGES", "final render failed")
             raise

@@ -10,7 +10,7 @@ from src.providers.base import VoiceSynthesisResult
 from src.services.import_service import ImportService
 from src.services.script_service import ScriptService
 from src.services.studio_project import LocalProjectManager
-from src.services.render_service import RenderService
+from src.services.render_service import RENDER_PRESETS, RemotionRenderer, RenderService
 from src.services.voice_service import VoiceConfig, VoiceService
 from src.studio_server import StudioApplication, StudioHTTPServer, run_server_in_thread
 
@@ -202,7 +202,8 @@ class TestStudioProject(unittest.TestCase):
         with patch("src.studio_server.NarrationTimelineService.prepare", autospec=True, side_effect=prepare), \
              patch.object(app, "_validate_voice_capacity"), \
              patch("src.services.render_service.RemotionRenderer.render", autospec=True, side_effect=render), \
-             patch("src.services.render_service.FFmpegFinalizer.finalize", autospec=True, side_effect=finalize):
+             patch("src.services.render_service.FFmpegFinalizer.finalize", autospec=True, side_effect=finalize), \
+             patch("src.services.render_service.RenderService._validate_output", autospec=True, return_value={"passed": True}):
             app.start_render(self.project_id, "preview")
             deadline = time.monotonic() + 5
             while app.render_status(self.project_id)["status"] == "running" and time.monotonic() < deadline:
@@ -254,11 +255,54 @@ class TestStudioProject(unittest.TestCase):
         self.assertTrue(updated["render"]["review_dirty"])
         self.assertFalse(updated["render"]["preview_approved"])
         renderer = RenderService(self.root, self.project_id)
-        renderer._prepare_render_config(renderer._preflight(final=False, require_audio=False))
+        renderer._prepare_render_config(renderer._preflight(final=False, require_audio=False), "preview")
         render_config = json.loads((self.project / "render" / "render-remotion.json").read_text(encoding="utf-8"))
         self.assertEqual([scene["id"] for scene in render_config["scenes"]], ["scene_01"])
+        self.assertEqual((render_config["width"], render_config["height"], render_config["fps"]), (720, 1280, 30))
         with self.assertRaisesRegex(Exception, "Keep at least one scene"):
             app.set_scene_decisions(self.project_id, {"scene_01": "cut"})
+
+    def test_render_presets_and_ffprobe_validation_reject_wrong_resolution(self):
+        self.assertEqual(
+            (RENDER_PRESETS["preview"]["width"], RENDER_PRESETS["preview"]["height"], RENDER_PRESETS["preview"]["fps"]),
+            (720, 1280, 30),
+        )
+        self.assertEqual(
+            (RENDER_PRESETS["final"]["width"], RENDER_PRESETS["final"]["height"], RENDER_PRESETS["final"]["fps"]),
+            (1080, 1920, 30),
+        )
+        output = self.project / "render" / "preview" / "preview.mp4"
+        output.parent.mkdir(parents=True, exist_ok=True)
+        output.write_bytes(b"fake")
+        wrong = {
+            "duration": 2.0, "width": 540, "height": 960, "fps": 30.0, "codec": "h264",
+            "pixel_format": "yuv420p", "video_bitrate": 5_000_000, "bitrate": 5_192_000,
+            "has_audio": True, "audio_codec": "aac", "aspect_ratio": "540:960", "portrait": True,
+            "readable": True,
+        }
+        renderer = RenderService(self.root, self.project_id)
+        with patch("src.services.render_service.probe_video", return_value=wrong), \
+             self.assertRaisesRegex(RuntimeError, "resolution 540x960"):
+            renderer._validate_output(output, "preview", "preview")
+
+    def test_remotion_command_renders_native_preset_without_scale(self):
+        cli = self.root / "remotion" / "node_modules" / "@remotion" / "cli" / "remotion-cli.js"
+        cli.parent.mkdir(parents=True)
+        cli.write_text("", encoding="utf-8")
+        renderer = RemotionRenderer(self.root)
+        for preview, width, height, bitrate in ((True, 720, 1280, "5M"), (False, 1080, 1920, "10M")):
+            output = self.project / "render" / ("preview" if preview else "final") / "test.mp4"
+            with patch("src.services.render_service.shutil.which", return_value="node"), \
+                 patch("src.services.render_service.subprocess.run") as run:
+                run.return_value.returncode = 0
+                renderer.render(self.project_id, output, preview=preview)
+            command = run.call_args.args[0]
+            self.assertIn(f"--width={width}", command)
+            self.assertIn(f"--height={height}", command)
+            self.assertIn("--fps=30", command)
+            self.assertIn(f"--video-bitrate={bitrate}", command)
+            self.assertIn("--pixel-format=yuv420p", command)
+            self.assertFalse(any(argument.startswith("--scale") for argument in command))
 
     def test_render_status_reports_interrupted_job_after_server_restart(self):
         status_file = self.project / "metadata" / "render-job.json"

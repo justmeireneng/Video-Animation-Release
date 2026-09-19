@@ -2,6 +2,16 @@
 
 ## v0.3 ZIP-first Google Flow source workflow
 
+## v0.4 Agent-first build boundary
+
+`AgentBuildService` and `python app.py build-video` are the production entry point. They do
+not require the desktop UI or a Windows package: a ZIP, a `SCENE`/`Narration` script, and an
+optional JSON config are enough to create/resume a project and run import, numeric scene
+mapping, ffprobe validation, source approval defaults, OmniVoice, subtitle timing, Remotion,
+FFmpeg mastering, and final metadata validation. The UI remains an optional local review tool.
+The canonical outputs are `render/preview/preview.mp4`, `render/final/final.mp4`, and
+`build_report.json`; `AGENT_WORKFLOW.md` is the short operator reference.
+
 Google Flow Ultra is an external, manual source-clip tool. This repository does not call a
 Flow/Veo API and does not automate the Flow website. `ImportService` accepts a ZIP or folder,
 `SceneMapper` parses `Scene[_ -]?(\d+)` case-insensitively and sorts numerically, and
@@ -11,8 +21,9 @@ versions and metadata.
 ```text
 Flow ZIP/folder -> ImportService -> SceneMapper -> ProbeService -> SourceVersionManager
                 -> ReviewService/UI -> approved source or image fallback
-                -> Remotion (visual, trim/crop, source audio, captions, narration, SFX/BGM)
-                -> FFmpegFinalizer (loudness/final mux) -> preview.mp4 / final.mp4
+                -> Remotion (720x1280 preview or 1080x1920 final, both 30fps)
+                -> FFmpegFinalizer (loudness/final mux, no video scaling)
+                -> ffprobe output validation -> preview.mp4 / final.mp4
 ```
 
 Narration from OmniVoice is the master timeline. Per-scene source audio supports `mute`,

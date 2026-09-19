@@ -67,6 +67,8 @@ def probe_video(path: Path, repo_root: Path) -> dict[str, Any]:
     return {
         "duration": round(duration, 3), "width": width, "height": height, "fps": round(fps, 3),
         "codec": video_stream.get("codec_name", "unknown"), "pixel_format": video_stream.get("pix_fmt", "unknown"),
+        "video_bitrate": int(video_stream.get("bit_rate") or 0),
+        "bitrate": int(raw.get("format", {}).get("bit_rate") or 0),
         "has_audio": audio_stream is not None, "audio_codec": audio_stream.get("codec_name") if audio_stream else None,
         "aspect_ratio": f"{width}:{height}", "portrait": height >= width, "readable": True,
     }

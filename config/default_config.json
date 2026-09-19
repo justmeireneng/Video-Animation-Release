@@ -6,8 +6,18 @@
   "default_voice_provider": "omnivoice",
   "default_voice_mode": "auto",
   "default_voice_speed": 1.1,
+  "agent": {
+    "entrypoint": "python app.py build-video",
+    "voice_provider": "omnivoice",
+    "voice_num_step": 4,
+    "desktop_ui_required": false,
+    "exe_build_required": false
+  },
   "default_fps": 30,
-  "default_crf": 26,
+  "render_presets": {
+    "preview": {"width": 720, "height": 1280, "fps": 30, "video_bitrate": "5M"},
+    "final": {"width": 1080, "height": 1920, "fps": 30, "video_bitrate": "10M"}
+  },
   "source_video": {
     "auto_approve_latest": false,
     "source_audio_default": {

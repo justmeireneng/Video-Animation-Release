@@ -19,6 +19,7 @@ from src.services.render_service import RenderService
 from src.services.narration_timeline import NarrationTimelineService
 from src.services.voice_service import VoiceConfig, VoiceService
 from src.services.voice_control import VoiceControlService
+from src.services.agent_build import AgentBuildService, AgentBuildError
 from src.services.script_service import ScriptService
 from src.services.studio_project import LocalProjectManager
 from src.studio_server import serve_studio
@@ -119,7 +120,10 @@ def _run_remotion(project_name: str, studio: bool = False) -> None:
         output = Path("..") / "projects" / project_name / "output" / "final_remotion.mp4"
         command += [
             "render", "src/index.ts", "TikTokExplainer", output.as_posix(),
-            f"--props={relative_props.as_posix()}", "--codec=h264", "--crf=23", "--concurrency=25%",
+            f"--props={relative_props.as_posix()}", "--codec=h264", "--audio-codec=aac",
+            "--audio-bitrate=192k", "--pixel-format=yuv420p", "--width=1080", "--height=1920",
+            "--fps=30", "--video-bitrate=10M", "--max-rate=12M", "--buffer-size=20M",
+            "--x264-preset=medium", "--concurrency=25%",
         ]
     subprocess.run(command, cwd=ROOT_DIR / "remotion", check=True)
 
@@ -197,6 +201,16 @@ def main():
 
     render_parser = subparsers.add_parser("render-video", help="Render a project through Remotion")
     render_parser.add_argument("project_name", help="Project with remotion-props.json")
+
+    build_video = subparsers.add_parser(
+        "build-video",
+        help="Agent-first ZIP + script -> validated preview and final MP4",
+        description="Run the complete unattended local pipeline: import, map, OmniVoice, subtitles, Remotion, FFmpeg, and ffprobe validation.",
+    )
+    build_video.add_argument("--zip", dest="zip_path", required=True, help="Google Flow source ZIP")
+    build_video.add_argument("--script", dest="script_path", required=True, help="SCENE/Narration TXT script")
+    build_video.add_argument("--project", dest="project_name", required=True, help="Project id or display name")
+    build_video.add_argument("--config", dest="config_path", help="Optional project_config.json")
 
     import_video = subparsers.add_parser("import-scene-video", help="Import a new immutable source-video version")
     import_video.add_argument("project_name")
@@ -276,7 +290,7 @@ def main():
     subtitle_offset.add_argument("--scene", required=True)
     subtitle_offset.add_argument("--y", type=int, required=True)
 
-    render_preview = subparsers.add_parser("render-preview", help="Render a 540x960 review MP4")
+    render_preview = subparsers.add_parser("render-preview", help="Render a validated 720x1280 review MP4")
     render_preview.add_argument("project_name")
 
     narration = subparsers.add_parser("prepare-narration", help="Synthesize narration and build phrase subtitle timing")
@@ -352,6 +366,18 @@ def main():
         _run_remotion(args.project_name, studio=True)
     elif args.command == "render-video":
         print(f"Final render: {RenderService(ROOT_DIR, args.project_name).render_final()}")
+    elif args.command == "build-video":
+        try:
+            result = AgentBuildService(ROOT_DIR).build(
+                zip_path=args.zip_path,
+                script_path=args.script_path,
+                project_name=args.project_name,
+                config_path=args.config_path,
+            )
+        except AgentBuildError as exc:
+            print(f"BUILD FAILED: {exc}", file=sys.stderr)
+            sys.exit(1)
+        print(json.dumps(result, ensure_ascii=False, indent=2))
     elif args.command == "import-scene-video":
         _print_video_record(_video_store(args.project_name).import_video(args.scene, args.file, args.provider, Path(args.file).name))
         print("STOP: video_status=pending_review. Approve or reject before final composition uses this clip.")
