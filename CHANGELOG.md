@@ -9,6 +9,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- Google Colab Run All workflow with a single CONFIG cell, persistent Google Drive model/project
+  caches, CUDA/CPU detection, resumable builds, validated Drive outputs, and setup documentation.
 - Agent-first `build-video` workflow: ZIP + script + optional config now runs import, validation,
   numeric scene mapping, OmniVoice, subtitles, Remotion, FFmpeg, and ffprobe output checks without
   the desktop UI; `AGENT_WORKFLOW.md` documents the command and `build_report.json` contract.

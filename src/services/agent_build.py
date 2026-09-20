@@ -167,12 +167,16 @@ class AgentBuildService:
         try:
             config = self._read_config(config_path)
             report["stages"]["config"] = {"status": "ok", "provided": config_path is not None}
+            stage_started = time.perf_counter()
             imported = ImportService(self.repo_root, project_id).import_zip(zip_path)
             report["stages"]["import"] = {"status": "ok", "mapped_scenes": imported.get("mapped_scenes", []), "scene_map": imported.get("scene_map", []), "missing_scenes": imported.get("missing_scenes", [])}
+            report["stages"]["import"]["elapsed_seconds"] = round(time.perf_counter() - stage_started, 3)
             warnings.extend(imported.get("warnings", []))
             warnings.extend(self._approve_first_valid_sources(project_id, imported))
+            stage_started = time.perf_counter()
             script = ScriptService(self.repo_root, project_id).import_text_file(script_path)
             report["stages"]["mapping"] = {"status": "ok" if not script.get("errors") and not script.get("unknown_scene_numbers") else "error", **script}
+            report["stages"]["mapping"]["elapsed_seconds"] = round(time.perf_counter() - stage_started, 3)
             if script.get("errors") or script.get("unknown_scene_numbers"):
                 raise AgentBuildError(f"Script mapping mismatch: errors={script.get('errors') or []}, unknown_scene_numbers={script.get('unknown_scene_numbers') or []}")
             readiness = self._readiness(project_id, self.repo_root)
@@ -187,6 +191,7 @@ class AgentBuildService:
             if config_timeout is None and isinstance(config.get("voice"), dict):
                 config_timeout = config["voice"].get("timeout_seconds")
             effective_timeout = float(config_timeout) if config_timeout is not None else voice_timeout_seconds
+            stage_started = time.perf_counter()
             voice = VoiceGenerationStage(self.repo_root, project_id).run(
                 use_existing_voice=use_existing_voice,
                 skip_voice=skip_voice,
@@ -195,13 +200,18 @@ class AgentBuildService:
                 on_progress=on_progress,
             )
             report["stages"]["voice"] = voice
+            report["stages"]["voice"]["elapsed_seconds"] = round(time.perf_counter() - stage_started, 3)
             report["stages"]["subtitles"] = {"status": "ok", "source": "narration", "scene_count": len(voice.get("scenes", []))}
             render = RenderService(self.repo_root, project_id)
+            stage_started = time.perf_counter()
             preview = render.render_preview()
             report["stages"]["preview"] = {"status": "ok", "path": str(preview)}
+            report["stages"]["preview"]["elapsed_seconds"] = round(time.perf_counter() - stage_started, 3)
             render.approve_preview()
+            stage_started = time.perf_counter()
             final = render.render_final()
             report["stages"]["final"] = {"status": "ok", "path": str(final)}
+            report["stages"]["final"]["elapsed_seconds"] = round(time.perf_counter() - stage_started, 3)
             report["status"] = "PARTIAL_PASS" if (skip_voice or use_existing_voice) else "FULL_PASS"
         except Exception as exc:
             errors.append(str(exc))
