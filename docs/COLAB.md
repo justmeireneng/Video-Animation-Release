@@ -29,7 +29,7 @@ MyDrive/AI_Video_Studio/
 ## What Run all does
 
 The notebook mounts Drive, validates both inputs, clones the pinned repository checkout,
-installs `requirements.txt` and the locked Remotion dependencies, checks ffmpeg/ffprobe,
+installs `requirements.txt` and first attempts the locked Remotion dependencies, checks ffmpeg/ffprobe,
 detects the real PyTorch CUDA device, prepares the persistent OmniVoice model cache, copies
 work into `/content/ai-video-work/`, and runs:
 
@@ -71,7 +71,9 @@ production `FULL_PASS`. TEST_MODE does not silently reduce the scene count.
 Reports include import/mapping status, voice device and cache hits, stage timings, output
 metadata, warnings, and errors. If Colab has no GPU, the build remains valid but voice
 generation may be slow. No Flow/Veo API, paid TTS, VoiceStudio, EXE, or private token is
-required.
+required. If a Colab/Linux pnpm version rejects the Windows-generated lockfile metadata,
+the notebook prints the exact pnpm error and retries without frozen-lockfile only inside the
+ephemeral `/content/ai-video-work` checkout; the GitHub repository is never modified.
 
 ## Open in Colab
 
