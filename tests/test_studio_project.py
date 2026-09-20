@@ -393,8 +393,8 @@ class TestStudioProject(unittest.TestCase):
         self.assertEqual(updated["voice"]["provider"], "omnivoice")
         self.assertEqual(updated["voice"]["design"], {"gender": "female", "age": "young adult", "pitch": "high"})
         self.assertFalse(updated["voice"]["approved"])
-        with self.assertRaisesRegex(Exception, "does not support mode"):
-            StudioApplication(self.root).update_voice(self.project_id, {"mode": "voice_clone"})
+        cloned = StudioApplication(self.root).update_voice(self.project_id, {"mode": "voice_clone"})
+        self.assertEqual(cloned["voice"]["mode"], "voice_clone")
 
     def test_voice_preview_is_persisted_and_required_before_approval(self):
         app = StudioApplication(self.root)

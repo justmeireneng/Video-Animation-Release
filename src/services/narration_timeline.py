@@ -4,6 +4,7 @@ import json
 import math
 import re
 import subprocess
+from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable
 
@@ -134,6 +135,17 @@ class NarrationTimelineService:
         transitions = ["crossfade", "soft_slide", "crossfade", "paper"]
         selected_total = sum(included_scene_ids is None or str(item["id"]) in included_scene_ids for item in source["scenes"])
         selected_index = 0
+        # OmniVoice voice-design calls can choose a different timbre on each
+        # generation.  Keep scene 1 as the user's chosen baseline and use its
+        # rendered WAV as a stable clone reference for all following scenes.
+        voice_anchor: Path | None = None
+        voice_anchor_text: str | None = None
+        first_scene = source["scenes"][0] if source.get("scenes") else None
+        if first_scene is not None:
+            first_output = audio_root / f"{first_scene['id']}.wav"
+            if first_output.is_file() and voice_config.provider == "omnivoice" and not voice_config.reference_audio:
+                voice_anchor = first_output
+                voice_anchor_text = str(first_scene.get("narration") or "")
         for index, item in enumerate(source["scenes"], 1):
             scene_id = str(item["id"])
             if included_scene_ids is not None and scene_id not in included_scene_ids:
@@ -146,8 +158,34 @@ class NarrationTimelineService:
                 on_scene(selected_index, selected_total, scene_id)
             output = audio_root / f"{scene_id}.wav"
             synthesis_result = None
+            scene_voice_config = voice_config
+            if (
+                voice_anchor is not None
+                and voice_config.provider == "omnivoice"
+                and not voice_config.reference_audio
+                and str(item.get("id")) != str(first_scene.get("id"))
+            ):
+                scene_voice_config = replace(
+                    voice_config,
+                    mode="voice_clone",
+                    reference_audio=voice_anchor,
+                    options={
+                        **voice_config.options,
+                        "reference_text": voice_anchor_text,
+                        "automatic_voice_anchor": True,
+                    },
+                )
             if synthesize or not output.is_file():
-                synthesis_result = voice_service.synthesize(str(item["narration"]), voice_config, output)
+                synthesis_result = voice_service.synthesize(str(item["narration"]), scene_voice_config, output)
+            if (
+                voice_anchor is None
+                and voice_config.provider == "omnivoice"
+                and not voice_config.reference_audio
+                and str(item.get("id")) == str(first_scene.get("id"))
+                and output.is_file()
+            ):
+                voice_anchor = output
+                voice_anchor_text = str(item.get("narration") or "")
             duration = self._audio_duration(output)
             _, sample_rate = wav_metadata(output)
             phrases = self._phrases(str(item["narration"]))
@@ -176,7 +214,7 @@ class NarrationTimelineService:
                 "subtitle_phrases": len(phrases),
                 "voice": synthesis_result.to_dict() if synthesis_result else {
                     "audio_file": str(output),
-                    "provider": voice_config.provider,
+                    "provider": scene_voice_config.provider,
                     "voice_id": voice_config.voice_id,
                     "language": voice_config.language,
                     "duration": round(duration, 3),

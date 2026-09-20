@@ -159,11 +159,14 @@ class OmniVoiceProvider(VoiceProvider):
 
     def capabilities(self) -> dict[str, Any]:
         return {
-            "synthesis": True, "multilingual": True, "voice_clone": False, "reference_audio": False,
+            # The bundled OmniVoice runtime exposes the native ref_audio/ref_text
+            # cloning path.  Keep this capability truthful so the UI can expose
+            # reference audio only when the active runtime actually supports it.
+            "synthesis": True, "multilingual": True, "voice_clone": True, "reference_audio": True,
             "voice_design": True, "voice_design_method": "native_instruct",
             "male": True, "female": True, "gender": True, "age": True, "pitch": True,
             "speed": True, "speed_range": {"min": 0.85, "max": 1.20, "step": 0.01},
-            "modes": ["auto", "voice_design"],
+            "modes": ["auto", "voice_design", "voice_clone"],
         }
 
     def list_voices(self) -> list[dict[str, Any]]:
@@ -314,6 +317,8 @@ class OmniVoiceProvider(VoiceProvider):
             "language": request.language, "speed": float(request.options.get("speed", 1.0)),
             "instruct": self._instruction(request.options), "device": self.device,
             "num_step": max(4, min(32, int(request.options.get("num_step", 16)))),
+            "ref_audio": str(Path(request.ref_audio).resolve()) if request.ref_audio else None,
+            "ref_text": request.options.get("reference_text") or None,
         }
         try:
             if os.environ.get("OMNIVOICE_DISABLE_WARM_WORKER") == "1":

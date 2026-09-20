@@ -36,8 +36,16 @@ def _generate(request, model, sf, *, load_seconds: float, warm_model: bool) -> d
     instruct = request.get("instruct")
     if instruct is not None and not isinstance(instruct, str):
         raise TypeError("instruct must be a string or null")
+    ref_audio = request.get("ref_audio")
+    if ref_audio is not None:
+        if not isinstance(ref_audio, str) or not Path(ref_audio).is_file():
+            raise FileNotFoundError(f"Reference audio was not found: {ref_audio}")
+    ref_text = request.get("ref_text")
+    if ref_text is not None and not isinstance(ref_text, str):
+        raise TypeError("ref_text must be a string or null")
     audio = model.generate(
         text=text.strip(), language=(language or "vi").strip(), instruct=instruct.strip() if instruct else None,
+        ref_audio=ref_audio, ref_text=ref_text.strip() if ref_text else None,
         speed=float(request.get("speed", 1.0)), num_step=int(request.get("num_step", 16)),
     )
     output = Path(request["output_path"])

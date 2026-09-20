@@ -72,22 +72,30 @@ class TestVoiceProviders(unittest.TestCase):
             (model / "model.safetensors").write_bytes(b"model")
             (model / "audio_tokenizer" / "model.safetensors").write_bytes(b"tokenizer")
             output = root / "preview.wav"
+            reference = root / "scene_01.wav"
+            reference.write_bytes(wav_bytes())
+            captured = {}
 
             def run(command, **kwargs):
                 request_file = Path(command[-1])
                 payload = json.loads(request_file.read_text(encoding="utf-8"))
+                captured.update(payload)
                 Path(payload["output_path"]).write_bytes(wav_bytes())
                 return subprocess.CompletedProcess(command, 0, '{"backend":"omnivoice_local"}\n', "")
 
             provider = OmniVoiceProvider(runtime_python=runtime, runner_path=runner, model_path=model)
             request = VoiceGenerationRequest(
                 text="Xin chào", output_path=output,
-                options={"mode": "voice_design", "speed": 1.12, "design": {"gender": "male", "age": "young adult", "pitch": "moderate"}},
+                ref_audio=reference,
+                options={"mode": "voice_clone", "speed": 1.12, "reference_text": "Giọng mẫu.", "design": {"gender": "male", "age": "young adult", "pitch": "moderate"}},
             )
             with patch.dict(os.environ, {"OMNIVOICE_DISABLE_WARM_WORKER": "1"}), patch("src.providers.voice.omnivoice._memory_headroom", return_value={"physical": 4 * 1024**3, "commit": 6 * 1024**3}), patch("subprocess.run", side_effect=run):
                 result = provider.generate_voice(request)
             self.assertEqual(result, output.resolve())
             self.assertEqual(provider.last_metrics["backend"], "omnivoice_local")
+            self.assertEqual(Path(captured["ref_audio"]), reference.resolve())
+            self.assertEqual(captured["ref_text"], "Giọng mẫu.")
+            self.assertIsNone(captured["instruct"])
 
     def test_omnivoice_warm_worker_reuses_loaded_model(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -226,6 +234,38 @@ class TestVoiceProviders(unittest.TestCase):
             self.assertEqual(fake.calls, 2)
             self.assertTrue(Path(preview.audio_file).is_file())
             self.assertFalse((root / "output" / "preview.mp4").exists())
+
+    def test_narration_uses_scene_one_audio_as_omnivoice_anchor(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            project = repo / "projects" / "demo"
+            (project / "audio").mkdir(parents=True)
+            (project / "narration.json").write_text(json.dumps({
+                "voice": {"provider": "omnivoice", "mode": "voice_design", "language": "vi"},
+                "scenes": [
+                    {"id": "scene_01", "narration": "Giọng chuẩn của cảnh một."},
+                    {"id": "scene_02", "narration": "Cảnh hai dùng cùng một giọng."},
+                ],
+            }), encoding="utf-8")
+            (project / "remotion.json").write_text(json.dumps({"scenes": []}), encoding="utf-8")
+            captured = []
+
+            def synthesize(_service, text, config, output):
+                output = Path(output)
+                output.parent.mkdir(parents=True, exist_ok=True)
+                output.write_bytes(wav_bytes())
+                captured.append((text, config.mode, config.reference_audio, dict(config.options)))
+                return VoiceSynthesisResult(output, "omnivoice", "default", "vi", 0.25, 16000)
+
+            timeline = NarrationTimelineService(repo, "demo")
+            with patch.object(timeline, "_audio_duration", return_value=0.25), \
+                 patch("src.services.voice_service.VoiceService.synthesize", autospec=True, side_effect=synthesize):
+                timeline.prepare(synthesize=True)
+
+            self.assertEqual([item[1] for item in captured], ["voice_design", "voice_clone"])
+            self.assertEqual(captured[1][2], project / "audio" / "scene_01.wav")
+            self.assertEqual(captured[1][3]["reference_text"], "Giọng chuẩn của cảnh một.")
+            self.assertTrue(captured[1][3]["automatic_voice_anchor"])
 
     def test_strict_local_cache_works_without_loading_provider_again(self):
         fake = FakeProvider()

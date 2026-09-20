@@ -22,15 +22,25 @@ and no Edge TTS/cloud fallback is used.
 | --- | --- |
 | Auto mode | Available |
 | Voice Design | Available through native `instruct` attributes |
-| Voice Clone | Not implemented; hidden |
+| Voice Clone | Available through native `ref_audio` / `ref_text` |
 | Gender | Male / Female |
 | Age | Young adult / middle-aged / older adult |
 | Pitch | Low / Moderate / High |
 | Speed | 0.85x–1.20x |
-| Reference audio | Not implemented; hidden |
+| Reference audio | Available for Voice Clone |
 | Preview before video render | Available |
 
 The speed control is passed to OmniVoice's native `speed` input and does not alter the pitch setting. The presets are 0.95 Slow, 1.00 Normal, 1.08 Natural+, 1.10 Default, 1.12 Fast, and 1.15 Fast+.
+
+### Consistent voice across scenes
+
+OmniVoice voice design can sample a different timbre on separate generation
+calls. During narration preparation, the first scene remains the selected
+voice-design baseline. Its generated WAV is then used as an automatic local
+reference for later scenes through Voice Clone, with the first scene transcript
+passed as `ref_text`. This keeps the speaker identity consistent without an
+extra anchor-generation pass. A manually selected reference audio file still
+takes precedence over the automatic scene-1 anchor.
 
 The active default is:
 
