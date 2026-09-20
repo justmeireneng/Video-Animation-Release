@@ -3,6 +3,7 @@ from __future__ import annotations
 import shutil
 import subprocess
 import json
+import os
 from pathlib import Path
 
 from src.services.project_state import ProjectStateService
@@ -41,6 +42,11 @@ class RemotionRenderer:
             raise ValueError("Render output must stay inside its project directory.") from exc
         relative_output = Path("..") / "projects" / project_name / output_relative_to_project
         preset = RENDER_PRESETS["preview" if preview else "final"]
+        # Remotion interprets percentages against the host CPU count.  On a
+        # small Colab runtime, 25% can round down to zero and abort the final
+        # render before it starts.  Pass a concrete value with a hard minimum
+        # of one worker instead.
+        concurrency = 1 if preview else max(1, (os.cpu_count() or 1) // 4)
         command = [
             node, str(cli), "render", "src/index.ts",
             "TikTokExplainer", relative_output.as_posix(), f"--props={props.as_posix()}",
@@ -48,7 +54,7 @@ class RemotionRenderer:
             f"--width={preset['width']}", f"--height={preset['height']}", f"--fps={preset['fps']}",
             f"--video-bitrate={preset['video_bitrate']}", f"--max-rate={preset['max_rate']}",
             f"--buffer-size={preset['buffer_size']}", f"--x264-preset={preset['x264_preset']}",
-            "--concurrency=1" if preview else "--concurrency=25%",
+            f"--concurrency={concurrency}",
             "--media-cache-size-in-bytes=251658240",
             "--offthreadvideo-cache-size-in-bytes=268435456",
             "--offthreadvideo-video-threads=1",

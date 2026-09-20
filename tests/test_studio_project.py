@@ -303,6 +303,9 @@ class TestStudioProject(unittest.TestCase):
             self.assertIn("--fps=30", command)
             self.assertIn(f"--video-bitrate={bitrate}", command)
             self.assertIn("--pixel-format=yuv420p", command)
+            self.assertTrue(any(argument.startswith("--concurrency=") for argument in command))
+            concurrency = int(next(argument.split("=", 1)[1] for argument in command if argument.startswith("--concurrency=")))
+            self.assertGreaterEqual(concurrency, 1)
             self.assertFalse(any(argument.startswith("--scale") for argument in command))
 
     def test_render_status_reports_interrupted_job_after_server_restart(self):
