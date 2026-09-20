@@ -71,7 +71,8 @@ production `FULL_PASS`. TEST_MODE does not silently reduce the scene count.
 Reports include import/mapping status, voice device and cache hits, stage timings, output
 metadata, warnings, and errors. If Colab has no GPU, the build remains valid but voice
 generation may be slow. No Flow/Veo API, paid TTS, VoiceStudio, EXE, or private token is
-required. If a Colab/Linux pnpm version rejects the Windows-generated lockfile metadata,
+required. The Remotion workspace declares its root package explicitly so pnpm 9 can install it
+on Colab. If a Colab/Linux pnpm version still rejects the Windows-generated lockfile metadata,
 the notebook prints the exact pnpm error and retries without frozen-lockfile only inside the
 ephemeral `/content/ai-video-work` checkout; the GitHub repository is never modified.
 
