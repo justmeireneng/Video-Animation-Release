@@ -32,6 +32,10 @@ and no Edge TTS/cloud fallback is used.
 
 The speed control is passed to OmniVoice's native `speed` input and does not alter the pitch setting. The presets are 0.95 Slow, 1.00 Normal, 1.08 Natural+, 1.10 Default, 1.12 Fast, and 1.15 Fast+.
 
+Voice speed is a project-level setting and remains fixed across scenes. Narration
+duration is the timing master; fitting narration by changing its speed is blocked
+and reported as `VOICE_SPEED_FIT_FORBIDDEN`.
+
 ### Consistent voice across scenes
 
 OmniVoice voice design can sample a different timbre on separate generation
@@ -71,11 +75,11 @@ without loading the model.
 
 Voice Control and `python app.py voice-preview <project>` create WAV previews only; neither command renders video. The voice cache reuses an existing audio file only when text, mode, gender, age, pitch, speed, decoding steps, and reference-audio content are identical. A strict local cache hit works without reloading the model.
 
-The desktop voice audition uses 4 diffusion steps. Video-preview narration also
-defaults to 4 for speed, with optional 8-step Balanced and 16-step Detailed
-settings. The final render reuses the exact narration approved in the video
-preview; it does not re-synthesize it. CLI narration retains the 16-step
-provider default. Different step settings have separate cache entries.
+The desktop voice audition uses 4 diffusion steps for responsiveness. Production
+narration defaults to 8 steps, with 4 reserved for smoke tests and 16 available
+as an optional quality setting. The final render reuses the exact narration
+approved in the video preview; it does not re-synthesize it. Different step
+settings have separate cache entries.
 
 `Quick Preview` synthesizes only the first natural phrase (up to 48 characters)
 for voice audition. `Full sentence` remains available when exact pacing across

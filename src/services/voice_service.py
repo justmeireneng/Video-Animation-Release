@@ -21,6 +21,8 @@ DEFAULT_PREVIEW_TEXT = (
 
 DEFAULT_VOICE_MODE = "voice_design"
 DEFAULT_OMNIVOICE_DESIGN = {"gender": "male", "age": "young adult", "pitch": "moderate"}
+PRODUCTION_VOICE_STEPS = 8
+OMNIVOICE_MODEL_ID = "k2-fsa/OmniVoice"
 
 
 def _speed_to_rate(speed: float) -> str:
@@ -168,7 +170,10 @@ class VoiceService:
         design = config.design
         payload = {
             "provider": selected_provider or config.provider,
-            "engine": config.options.get("engine") or config.options.get("model"),
+            "engine": config.options.get("engine") or config.options.get("model") or (
+                OMNIVOICE_MODEL_ID if config.provider == "omnivoice" else None
+            ),
+            "num_step": config.options.get("num_step", PRODUCTION_VOICE_STEPS) if config.provider == "omnivoice" else None,
             "voice_id": config.voice_id,
             "language": config.language,
             "mode": config.mode,

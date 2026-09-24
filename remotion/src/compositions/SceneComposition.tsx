@@ -34,7 +34,9 @@ export const SceneComposition = ({project, projectSlug, scene}: Props) => {
     <AbsoluteFill style={{fontFamily: '"Be Vietnam Pro", sans-serif'}}>
       <Background />
       {layout}
-      <Audio src={staticFile(`${projectSlug}/${scene.narrationAudio}`)} volume={1} />
+      <Sequence from={scene.narrationOffsetFrames ?? 0}>
+        <Audio src={staticFile(`${projectSlug}/${scene.narrationAudio}`)} volume={1} />
+      </Sequence>
       {scene.sfx?.map((sfx, index) => (
         <Sequence key={`${sfx.src}-${index}`} from={sfx.startFrame ?? 0} premountFor={15}>
           <Audio src={staticFile(`${projectSlug}/${sfx.src}`)} volume={sfx.volume ?? 0.16} />

@@ -245,6 +245,7 @@ class TestVoiceProviders(unittest.TestCase):
                 "scenes": [
                     {"id": "scene_01", "narration": "Giọng chuẩn của cảnh một."},
                     {"id": "scene_02", "narration": "Cảnh hai dùng cùng một giọng."},
+                    {"id": "scene_03", "narration": "Cảnh ba tiếp tục cùng một giọng."},
                 ],
             }), encoding="utf-8")
             (project / "remotion.json").write_text(json.dumps({"scenes": []}), encoding="utf-8")
@@ -260,12 +261,17 @@ class TestVoiceProviders(unittest.TestCase):
             timeline = NarrationTimelineService(repo, "demo")
             with patch.object(timeline, "_audio_duration", return_value=0.25), \
                  patch("src.services.voice_service.VoiceService.synthesize", autospec=True, side_effect=synthesize):
-                timeline.prepare(synthesize=True)
+                result = timeline.prepare(synthesize=True)
 
-            self.assertEqual([item[1] for item in captured], ["voice_design", "voice_clone"])
+            self.assertEqual([item[1] for item in captured], ["voice_design", "voice_clone", "voice_clone"])
             self.assertEqual(captured[1][2], project / "audio" / "scene_01.wav")
             self.assertEqual(captured[1][3]["reference_text"], "Giọng chuẩn của cảnh một.")
             self.assertTrue(captured[1][3]["automatic_voice_anchor"])
+            self.assertEqual(captured[2][2], project / "audio" / "scene_01.wav")
+            self.assertTrue(captured[2][3]["automatic_voice_anchor"])
+            self.assertEqual(result["timing_authority"], "narration_audio")
+            self.assertEqual(result["voice_speed_fit_code"], "VOICE_SPEED_FIT_FORBIDDEN")
+            self.assertTrue(all(item["voice_speed_fit"] == "forbidden" for item in result["scenes"]))
 
     def test_strict_local_cache_works_without_loading_provider_again(self):
         fake = FakeProvider()

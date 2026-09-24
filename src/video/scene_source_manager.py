@@ -77,12 +77,16 @@ def probe_video(path: Path, repo_root: Path) -> dict[str, Any]:
 def _timing_policy(source_duration: float, target_duration: float) -> dict[str, Any]:
     if source_duration <= 0 or target_duration <= 0:
         return {"playback_rate": 1.0, "hold_last_frame": False, "loop": False}
-    if source_duration > target_duration * 1.1:
-        return {"playback_rate": 1.0, "hold_last_frame": False, "loop": False, "recommended_trim_end": round(target_duration, 3)}
-    playback_rate = source_duration / target_duration
-    if 0.9 <= playback_rate <= 1.1:
-        return {"playback_rate": round(playback_rate, 4), "hold_last_frame": False, "loop": False}
-    return {"playback_rate": 1.0, "hold_last_frame": source_duration < target_duration, "loop": False}
+    # Narration determines the scene length.  Keep a long source at natural
+    # speed and trim only the visual; slow a short source by at most 5%.
+    if source_duration >= target_duration:
+        return {"playback_rate": 1.0, "hold_last_frame": False, "loop": False,
+                "recommended_trim_end": round(target_duration, 3)}
+    playback_rate = max(0.95, source_duration / target_duration)
+    visible_duration = source_duration / playback_rate
+    return {"playback_rate": round(playback_rate, 4),
+            "hold_last_frame": visible_duration < target_duration - 1 / 30,
+            "loop": False}
 
 
 class SceneVideoStore:
@@ -369,10 +373,17 @@ class SceneVideoStore:
         trim_end = float(item["trim"]["end"] or item["probe"]["duration"])
         timing = dict(item.get("timing", {}))
         if target_duration is not None and not timing.get("manual_playback_rate"):
-            timing = _timing_policy(trim_end - trim_start, target_duration)
-            recommended_end = timing.pop("recommended_trim_end", None)
+            automatic = _timing_policy(trim_end - trim_start, target_duration)
+            recommended_end = automatic.pop("recommended_trim_end", None)
             if recommended_end is not None:
                 trim_end = min(trim_end, trim_start + float(recommended_end))
+            if timing.get("manual_hold_last_frame"):
+                automatic["hold_last_frame"] = timing.get("hold_last_frame", False)
+                automatic["manual_hold_last_frame"] = True
+            timing = automatic
+        elif target_duration is not None and not timing.get("manual_hold_last_frame"):
+            visible_duration = (trim_end - trim_start) / max(0.01, float(timing.get("playback_rate") or 1.0))
+            timing["hold_last_frame"] = visible_duration < target_duration - 1 / 30
         return {
             "src": item["source_video"], "provider": item["source_provider"],
             "sourceFilename": item["source_filename"], "version": item["version"], "review": item["status"],

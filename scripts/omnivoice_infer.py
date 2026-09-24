@@ -46,7 +46,7 @@ def _generate(request, model, sf, *, load_seconds: float, warm_model: bool) -> d
     audio = model.generate(
         text=text.strip(), language=(language or "vi").strip(), instruct=instruct.strip() if instruct else None,
         ref_audio=ref_audio, ref_text=ref_text.strip() if ref_text else None,
-        speed=float(request.get("speed", 1.0)), num_step=int(request.get("num_step", 16)),
+        speed=float(request.get("speed", 1.0)), num_step=int(request.get("num_step", 8)),
     )
     output = Path(request["output_path"])
     output.parent.mkdir(parents=True, exist_ok=True)
@@ -56,7 +56,7 @@ def _generate(request, model, sf, *, load_seconds: float, warm_model: bool) -> d
         "backend": "omnivoice_local", "device": device, "sample_rate": model.sampling_rate,
         "load_seconds": round(load_seconds, 2), "generation_seconds": round(generation_seconds, 2),
         "elapsed_seconds": round(load_seconds + generation_seconds, 2),
-        "num_step": int(request.get("num_step", 16)), "warm_model": warm_model,
+        "num_step": int(request.get("num_step", 8)), "warm_model": warm_model,
     }
 
 

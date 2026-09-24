@@ -94,6 +94,8 @@ class VoiceGenerationStage:
             device = str(health.get("device") or "cpu")
             provider_report = {
                 "provider": "omnivoice", "device": device, "health": health,
+                "model": "k2-fsa/OmniVoice", "num_steps": num_step or 8,
+                "seed": None, "session_mode": "sequential_warm_worker",
                 "capabilities": provider.capabilities(),
                 "optimization_audit": {
                     "cuda": device.startswith("cuda"), "fp16": True,

@@ -4,13 +4,17 @@ import json
 import math
 import re
 import subprocess
+import time
 from dataclasses import replace
 from pathlib import Path
 from typing import Any, Callable
 
 from src.providers.base import wav_metadata
-from src.services.voice_service import VoiceConfig, VoiceService
+from src.services.voice_service import PRODUCTION_VOICE_STEPS, VoiceConfig, VoiceService
 from src.video.scene_source_manager import SceneVideoStore, find_ffprobe
+
+
+VOICE_SPEED_FIT_FORBIDDEN = "VOICE_SPEED_FIT_FORBIDDEN"
 
 
 class NarrationTimelineService:
@@ -76,7 +80,8 @@ class NarrationTimelineService:
         return float(result.stdout.strip())
 
     @staticmethod
-    def _subtitle_timing(phrases: list[str], duration: float, fps: int) -> list[dict[str, Any]]:
+    def _subtitle_timing(phrases: list[str], duration: float, fps: int,
+                         offset_frames: int = 0) -> list[dict[str, Any]]:
         total_words = sum(len(phrase.split()) for phrase in phrases)
         frame_end = max(1, round(duration * fps))
         cursor = 0
@@ -86,7 +91,7 @@ class NarrationTimelineService:
             consumed += len(phrase.split())
             end = frame_end if index == len(phrases) - 1 else round(frame_end * consumed / total_words)
             end = max(cursor + 1, end)
-            result.append({"startFrame": cursor, "endFrame": end, "text": phrase})
+            result.append({"startFrame": cursor + offset_frames, "endFrame": end + offset_frames, "text": phrase})
             cursor = end
         return result
 
@@ -116,7 +121,9 @@ class NarrationTimelineService:
         remotion_path = self.remotion_path
         existing_scenes = {str(item.get("id")): item for item in existing_project.get("scenes", [])}
         fps = 30
-        pause = float(source.get("scene_pause_seconds", 0.35))
+        pre_roll = max(0.0, float(source.get("pre_roll_seconds", 0.15)))
+        post_roll = max(0.0, float(source.get("post_roll_seconds", source.get("scene_pause_seconds", 0.25))))
+        pre_roll_frames = round(pre_roll * fps)
         is_desktop_project = (self.project_root / "project.json").is_file()
         audio_root = self.project_root / ("voice/narration" if is_desktop_project else "audio")
         audio_root.mkdir(parents=True, exist_ok=True)
@@ -125,6 +132,8 @@ class NarrationTimelineService:
             if num_step not in {4, 8, 16}:
                 raise ValueError("OmniVoice narration quality must use 4, 8 or 16 steps.")
             voice_config.options = {**voice_config.options, "num_step": num_step}
+        elif "num_step" not in voice_config.options:
+            voice_config.options = {**voice_config.options, "num_step": PRODUCTION_VOICE_STEPS}
         if synthesize and voice_config.approval_required and not voice_config.approved:
             raise RuntimeError("Voice selection is awaiting approval; narration was not regenerated.")
         # Desktop projects may use only the explicitly selected local provider.
@@ -158,6 +167,7 @@ class NarrationTimelineService:
                 on_scene(selected_index, selected_total, scene_id)
             output = audio_root / f"{scene_id}.wav"
             synthesis_result = None
+            generation_started = time.perf_counter()
             scene_voice_config = voice_config
             if (
                 voice_anchor is not None
@@ -177,6 +187,7 @@ class NarrationTimelineService:
                 )
             if synthesize or not output.is_file():
                 synthesis_result = voice_service.synthesize(str(item["narration"]), scene_voice_config, output)
+            generation_seconds = round(time.perf_counter() - generation_started, 3) if synthesis_result else 0.0
             if (
                 voice_anchor is None
                 and voice_config.provider == "omnivoice"
@@ -189,16 +200,17 @@ class NarrationTimelineService:
             duration = self._audio_duration(output)
             _, sample_rate = wav_metadata(output)
             phrases = self._phrases(str(item["narration"]))
-            scene_frames = math.ceil((duration + pause) * fps)
+            scene_frames = math.ceil((duration + post_roll) * fps) + pre_roll_frames
             scene = dict(existing_scenes.get(scene_id, {}))
             scene.update({
                 "id": scene_id,
                 "index": index,
                 "durationInFrames": scene_frames,
+                "narrationOffsetFrames": pre_roll_frames,
                 "narration": item["narration"],
                 "intent": item.get("intent", ""),
                 "narrationAudio": f"{'voice/narration' if is_desktop_project else 'audio'}/{scene_id}.wav",
-                "subtitle": self._subtitle_timing(phrases, duration, fps),
+                "subtitle": self._subtitle_timing(phrases, duration, fps, pre_roll_frames),
             })
             scene.setdefault("approved", False)
             scene.setdefault("layout", "full_bleed")
@@ -210,7 +222,16 @@ class NarrationTimelineService:
             report.append({
                 "scene_id": scene_id,
                 "narration_duration": round(duration, 3),
+                "voice_duration": round(duration, 3),
+                "target_duration": round(scene_frames / fps, 3),
                 "timeline_duration": round(scene_frames / fps, 3),
+                "pre_roll_seconds": round(pre_roll_frames / fps, 3),
+                "post_roll_seconds": round((scene_frames - pre_roll_frames) / fps - duration, 3),
+                "voice_speed": scene_voice_config.speed,
+                "voice_num_step": int(scene_voice_config.options["num_step"]),
+                "voice_speed_fit": "forbidden",
+                "voice_speed_fit_code": VOICE_SPEED_FIT_FORBIDDEN,
+                "generation_seconds": generation_seconds,
                 "subtitle_phrases": len(phrases),
                 "voice": synthesis_result.to_dict() if synthesis_result else {
                     "audio_file": str(output),
@@ -243,10 +264,37 @@ class NarrationTimelineService:
             })
         remotion_path.write_text(json.dumps(project, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
         # Scene metadata remains authoritative for imported/approved source clips.
-        SceneVideoStore(self.repo_root, self.project_name).sync_all_to_remotion(recompute_timing=synthesize)
+        SceneVideoStore(self.repo_root, self.project_name).sync_all_to_remotion(recompute_timing=True)
+        projected = json.loads(remotion_path.read_text(encoding="utf-8"))
+        projected_scenes = {str(item["id"]): item for item in projected.get("scenes", [])}
+        for item in report:
+            visual = projected_scenes.get(item["scene_id"], {})
+            source_video = next((entry for entry in visual.get("videoSources", []) if entry.get("review") == "approved"), None)
+            if source_video is None:
+                item.update({"source_duration": None, "visual_playback_rate": None, "hold_duration": 0.0})
+                continue
+            source_duration = float(source_video.get("duration") or 0)
+            trim = source_video.get("trim") or {}
+            trimmed_duration = max(0.0, float(trim.get("end") or source_duration) - float(trim.get("start") or 0))
+            visual_speed = float(source_video.get("playbackRate") or 1.0)
+            visible_duration = trimmed_duration / visual_speed
+            item.update({
+                "source_duration": round(source_duration, 3),
+                "source_trimmed_duration": round(trimmed_duration, 3),
+                "visual_playback_rate": round(visual_speed, 4),
+                "hold_duration": round(max(0.0, item["target_duration"] - visible_duration), 3) if source_video.get("holdLastFrame") else 0.0,
+            })
         result = {
             "project": self.project_name,
             "voice_provider": voice_config.provider,
+            "voice_model": voice_config.options.get("engine") or "k2-fsa/OmniVoice",
+            "voice_num_step": int(voice_config.options["num_step"]),
+            "voice_speed": voice_config.speed,
+            "voice_seed": None,
+            "session_mode": "sequential_warm_worker" if synthesize else "reuse_existing_audio",
+            "timing_authority": "narration_audio",
+            "voice_speed_fit": "forbidden",
+            "voice_speed_fit_code": VOICE_SPEED_FIT_FORBIDDEN,
             "voice_backend": "provider-neutral voice service; OmniVoice remains the default",
             "voice_warning": voice_service.last_warning,
             "total_narration_duration": round(sum(item["narration_duration"] for item in report), 3),

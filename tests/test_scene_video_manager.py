@@ -3,7 +3,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from src.video.scene_source_manager import SceneVideoStore
+from src.video.scene_source_manager import SceneVideoStore, _timing_policy
 from src.services.narration_timeline import NarrationTimelineService
 
 
@@ -127,6 +127,15 @@ class TestSceneVideoStore(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.store.set_playback_speed("scene_01", 1, 2.01)
         self.assertEqual(self.source.read_bytes(), b"test-video")
+
+    def test_voice_master_timing_uses_safe_visual_slowdown_then_hold(self):
+        timing = _timing_policy(8.0, 10.0)
+        self.assertEqual(timing["playback_rate"], 0.95)
+        self.assertTrue(timing["hold_last_frame"])
+        longer = _timing_policy(12.0, 10.0)
+        self.assertEqual(longer["playback_rate"], 1.0)
+        self.assertEqual(longer["recommended_trim_end"], 10.0)
+        self.assertFalse(longer["hold_last_frame"])
 
     def test_subtitle_phrase_groups_stay_compact(self):
         phrases = NarrationTimelineService._phrases(

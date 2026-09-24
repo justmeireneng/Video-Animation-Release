@@ -13,6 +13,7 @@ import mimetypes
 import socket
 import threading
 import uuid
+from dataclasses import replace
 from http import HTTPStatus
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -499,10 +500,26 @@ class StudioApplication:
         config.options = {**config.options, "num_step": voice_steps}
         service = VoiceService(root, fallback=False)
         uncached = []
-        for scene in self._read_json(root / "remotion.json").get("scenes", []):
+        scenes = self._read_json(root / "remotion.json").get("scenes", [])
+        first_scene = scenes[0] if scenes else None
+        anchor = root / str((first_scene or {}).get("narrationAudio") or "voice/narration/scene_01.wav")
+        anchor_text = str((first_scene or {}).get("narration") or "")
+        for scene in scenes:
             if decisions.get(scene.get("id")) == "cut":
                 continue
-            key = service.cache_key(str(scene.get("narration", "")), config, selected_provider=config.provider)
+            scene_config = config
+            if (
+                first_scene is not None
+                and scene.get("id") != first_scene.get("id")
+                and config.provider == "omnivoice"
+                and not config.reference_audio
+                and anchor.is_file()
+            ):
+                scene_config = replace(
+                    config, mode="voice_clone", reference_audio=anchor,
+                    options={**config.options, "reference_text": anchor_text, "automatic_voice_anchor": True},
+                )
+            key = service.cache_key(str(scene.get("narration", "")), scene_config, selected_provider=config.provider)
             if not ((service.cache_root / f"{key}.wav").is_file() and (service.cache_root / f"{key}.json").is_file()):
                 uncached.append(str(scene.get("id")))
         if uncached:
@@ -513,7 +530,7 @@ class StudioApplication:
                     f"Narration cache is missing for {', '.join(uncached)}. {detail}", HTTPStatus.CONFLICT,
                 )
 
-    def start_render(self, project_id: str, quality: str, voice_steps: int = 4) -> dict[str, Any]:
+    def start_render(self, project_id: str, quality: str, voice_steps: int = 8) -> dict[str, Any]:
         identifier = self._project_id(project_id)
         self._project_root(identifier)
         if quality not in {"preview", "final"}:
@@ -798,7 +815,7 @@ class StudioRequestHandler(SimpleHTTPRequestHandler):
                 return
             if len(parts) == 4 and parts[:2] == ["api", "projects"] and parts[3] == "render":
                 body = self._body_json()
-                self._json(HTTPStatus.ACCEPTED, self.app.start_render(parts[2], str(body.get("quality", "preview")), int(body.get("voice_steps", 4))))
+                self._json(HTTPStatus.ACCEPTED, self.app.start_render(parts[2], str(body.get("quality", "preview")), int(body.get("voice_steps", 8))))
                 return
             if len(parts) == 5 and parts[:2] == ["api", "projects"] and parts[3:] == ["render", "approve-preview"]:
                 self._json(HTTPStatus.OK, self.app.approve_render_preview(parts[2]))

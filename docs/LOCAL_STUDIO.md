@@ -38,12 +38,11 @@ send projects or source media to a cloud service.
    each stage or a real error; it does not produce a mock video. The render
    preflight rejects unapproved source videos, scripts or voices. No cloud
    voice fallback is used for desktop projects. For the 4-thread/8 GB target,
-   the default is Fast (4 decoding steps); Balanced (8) and Detailed (16) are
-   available before a new preview. The final render reuses the narration heard
+   the default is Balanced (8 decoding steps); Fast (4) is for smoke tests and
+   Detailed (16) is optional before a new preview. The final render reuses the narration heard
    in the approved preview instead of generating it again. OmniVoice releases
    its model memory before Remotion starts.
-   Review MP4s render at 432×768 with one Remotion worker; final MP4s use the
-   project resolution.
+   Preview MP4s render at 720×1280; final MP4s use 1080×1920.
 6. Watch the preview in Final Review. Keep or cut scenes and make trim, crop,
    source-audio, 0.50–2.00x video-speed, hold-last-frame and transition edits
    non-destructively. These decisions are saved per project; cut scenes are

@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 
 from ..base import VoiceGenerationRequest, VoiceProvider, VoiceSynthesisResult, wav_metadata
+from src.services.voice_service import PRODUCTION_VOICE_STEPS
 
 COMFORTABLE_MEMORY_BYTES = 3 * 1024**3
 MIN_COMMIT_HEADROOM_BYTES = 1 * 1024**3
@@ -316,7 +317,7 @@ class OmniVoiceProvider(VoiceProvider):
             "model_path": str(self.model_path.resolve()), "output_path": str(output), "text": request.text,
             "language": request.language, "speed": float(request.options.get("speed", 1.0)),
             "instruct": self._instruction(request.options), "device": self.device,
-            "num_step": max(4, min(32, int(request.options.get("num_step", 16)))),
+            "num_step": max(4, min(32, int(request.options.get("num_step", PRODUCTION_VOICE_STEPS)))),
             "ref_audio": str(Path(request.ref_audio).resolve()) if request.ref_audio else None,
             "ref_text": request.options.get("reference_text") or None,
         }

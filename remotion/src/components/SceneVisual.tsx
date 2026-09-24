@@ -16,14 +16,19 @@ export const SceneVisual = ({scene, projectSlug, fullBleed = false}: Props) => {
   const trimAfter = Math.max(trimBefore + 1, Math.round(source.trim.end * fps));
   const playbackRate = Math.min(2, Math.max(0.5, source.playbackRate ?? 1));
   const visibleFrames = Math.max(1, Math.round((trimAfter - trimBefore) / playbackRate));
+  const sourceEndFrame = Math.min(visibleFrames, durationInFrames);
+  const holdFrames = Math.max(0, durationInFrames - visibleFrames);
   const audio = source.sourceAudio ?? {mode: 'mute', enabled: false, volume: 0, duck_under_narration: true, fade_in: 0, fade_out: 0};
   const narrationActive = scene.subtitle.some((phrase) => frame >= phrase.startFrame && frame < phrase.endFrame);
   const duck = audio.mode === 'background' && audio.duck_under_narration && narrationActive ? 0.45 : 1;
   const fadeInFrames = Math.max(1, Math.round(audio.fade_in * fps));
   const fadeOutFrames = Math.max(1, Math.round(audio.fade_out * fps));
   const fadeIn = interpolate(frame, [0, fadeInFrames], [0, 1], {extrapolateRight: 'clamp'});
-  const fadeOut = interpolate(frame, [durationInFrames - fadeOutFrames, durationInFrames], [1, 0], {extrapolateLeft: 'clamp'});
+  const fadeOut = interpolate(frame, [Math.max(0, sourceEndFrame - fadeOutFrames), sourceEndFrame], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
   const sourceVolume = audio.enabled && audio.mode !== 'mute' ? audio.volume * duck * fadeIn * fadeOut : 0;
+  const holdScale = holdFrames > Math.round(1.5 * fps)
+    ? interpolate(Math.max(0, frame - visibleFrames), [0, holdFrames], [1, 1.03], {extrapolateRight: 'clamp'})
+    : 1;
   const style = {
     width: '100%',
     height: '100%',
@@ -52,7 +57,9 @@ export const SceneVisual = ({scene, projectSlug, fullBleed = false}: Props) => {
       )}
       {source.holdLastFrame && visibleFrames < durationInFrames ? (
         <Sequence from={visibleFrames} durationInFrames={durationInFrames - visibleFrames}>
-          <Freeze frame={visibleFrames - 1}>{video(true)}</Freeze>
+          <div style={{width: '100%', height: '100%', transform: `scale(${holdScale})`}}>
+            <Freeze frame={visibleFrames - 1}>{video(true)}</Freeze>
+          </div>
         </Sequence>
       ) : null}
     </div>

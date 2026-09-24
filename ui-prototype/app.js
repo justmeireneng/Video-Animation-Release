@@ -74,7 +74,7 @@ const state = {
   reviewState: { finalized: false, dirty: false },
   automationState: { status: "SOURCE READY", progress: 100, step: 1 },
   importReport: null,
-  renderState: { quality: "preview", status: "READY", progress: 0, activeStep: -1, requestScene: "scene_11", requestCategory: "Source", videoUrl: null, error: null, voiceSteps: 4 },
+  renderState: { quality: "preview", status: "READY", progress: 0, activeStep: -1, requestScene: "scene_11", requestCategory: "Source", videoUrl: null, error: null, voiceSteps: 8 },
   uiState: { screen: "dashboard", inspector: "scene", projectMenuOpen: false },
 };
 
@@ -154,7 +154,7 @@ function applyBackendProject(detail) {
   state.reviewState = { finalized: Boolean(manifest.render?.final_ready), dirty: Boolean(manifest.render?.review_dirty), showCutsOnly: false };
   state.automationState = { status: summary.imported ? "SOURCE READY" : "IDLE", progress: summary.imported ? 100 : 0, step: summary.imported ? 1 : 0 };
   state.renderState = { ...structuredClone(DEFAULT_RENDER_STATE), requestScene: state.sceneState.selectedId || "",
-    voiceSteps: Number(manifest.render?.voice_steps || 4),
+    voiceSteps: Number(manifest.render?.voice_steps || 8),
     status: manifest.render?.final_ready ? "FINAL READY" : manifest.render?.preview_ready ? "PREVIEW READY" : "READY",
     videoUrl: manifest.render?.final_ready ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/render/final?t=${Date.now()}` : manifest.render?.preview_ready ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/render/preview?t=${Date.now()}` : null,
     progress: manifest.render?.final_ready || manifest.render?.preview_ready ? 100 : 0 };

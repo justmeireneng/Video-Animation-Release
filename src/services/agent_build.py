@@ -64,9 +64,9 @@ class AgentBuildService:
             manifest["voice"] = {**dict(manifest.get("voice") or {}), **voice, "provider": "omnivoice", "approved": True}
         else:
             manifest["voice"] = {**dict(manifest.get("voice") or {}), "provider": "omnivoice", "approved": True}
-        # Four diffusion steps are the safe unattended default for the current
-        # CPU target. Higher quality remains opt-in via voice.num_step (4/8/16).
-        requested_steps = int(manifest["voice"].get("num_step", 4))
+        # Production uses the balanced 8-step voice path. Four steps remain
+        # available for explicit smoke tests and 16 for optional quality runs.
+        requested_steps = int(manifest["voice"].get("num_step", 8))
         if requested_steps not in {4, 8, 16}:
             raise AgentBuildError("voice.num_step must be 4, 8, or 16.")
         manifest["voice"]["num_step"] = requested_steps
@@ -186,7 +186,7 @@ class AgentBuildService:
             warnings.extend(self._apply_config(project_id, config))
             ScriptService(self.repo_root, project_id).approve_mapping()
             report["stages"]["validation"] = {"status": "ok", "scenes": readiness}
-            effective_steps = voice_num_step or int((self.projects.load(project_id).get("voice") or {}).get("num_step", 4))
+            effective_steps = voice_num_step or int((self.projects.load(project_id).get("voice") or {}).get("num_step", 8))
             config_timeout = config.get("voice_timeout_seconds")
             if config_timeout is None and isinstance(config.get("voice"), dict):
                 config_timeout = config["voice"].get("timeout_seconds")
@@ -228,11 +228,20 @@ class AgentBuildService:
             "provider": manifest.get("voice", {}).get("provider", "omnivoice"),
             "language": manifest.get("voice", {}).get("language", "vi"),
             "speed": manifest.get("voice", {}).get("speed", 1.10),
+            "num_steps": int((manifest.get("voice") or {}).get("num_step", 8)),
+            "seed": (manifest.get("voice") or {}).get("seed"),
+            "session_mode": provider_meta.get("session_mode", "sequential_warm_worker"),
             "device": provider_meta.get("device") or (scene_reports[0].get("device") if scene_reports else None),
             "cache_hits": sum(1 for item in scene_reports if (item.get("voice") or {}).get("cache_hit")),
             "scene_count": len(scene_reports),
             "resume_capable": True,
             "remote_ready": True,
+        }
+        report["timing"] = {
+            "authority": "narration_audio",
+            "voice_speed_fit": "forbidden",
+            "voice_speed_fit_code": "VOICE_SPEED_FIT_FORBIDDEN",
+            "visual_policy": "natural_speed_then_safe_0.95_to_1.00_then_hold",
         }
         report["scene_count"] = len((report.get("stages", {}).get("validation") or {}).get("scenes", [])) or len((report.get("stages", {}).get("import") or {}).get("mapped_scenes", []))
         report["outputs"] = {"preview": str(project_root / "render/preview/preview.mp4"), "final": str(project_root / "render/final/final.mp4"), "report": str(report_path)}

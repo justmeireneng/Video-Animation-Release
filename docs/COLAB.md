@@ -52,9 +52,15 @@ both `nvidia-smi` and `torch.cuda.is_available()` confirm a usable GPU; otherwis
 CPU fallback warning. The current runner supports fp16 and lazy model loading. It does not
 claim bf16, int8, quantization, batching, or chunked inference support.
 
-Each scene's voice cache is keyed by the existing provider/config/text hash. Use
+Production voice generation uses 8 OmniVoice steps. Four steps are reserved for
+smoke tests and 16 steps are an optional quality setting. Each scene's voice cache is keyed by the existing provider/config/text hash, including
+the model version, step count, speed, and reference audio. Use
 `FORCE_REGENERATE_VOICE = True` only when intentionally invalidating local voice artifacts.
 `FORCE_REBUILD = True` clears render artifacts while retaining the voice cache.
+
+Narration audio is the timing authority. The build never changes voice speed to
+fit a source clip (`VOICE_SPEED_FIT_FORBIDDEN`); visuals adapt at natural speed,
+safe 0.95–1.00 playback when needed, then hold the last frame.
 
 Set `TEST_MODE = True` only for a deliberate diagnostic run. The flags
 `TEST_USE_EXISTING_VOICE` and `TEST_SKIP_VOICE` are disabled by default and require

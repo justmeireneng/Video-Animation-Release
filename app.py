@@ -214,7 +214,7 @@ def main():
     build_video.add_argument("--use-existing-voice", action="store_true", help="TEST ONLY: reuse existing per-scene WAV files; never call OmniVoice")
     build_video.add_argument("--skip-voice", action="store_true", help="TEST ONLY: create silent WAVs; report is PARTIAL_PASS, never FULL_PASS")
     build_video.add_argument("--voice-timeout-seconds", type=float, default=20 * 60, help="Voice-stage warning threshold; long CPU inference is not killed early")
-    build_video.add_argument("--voice-num-step", type=int, choices=[4, 8, 16], help="OmniVoice diffusion steps; default is 4 for the current CPU target")
+    build_video.add_argument("--voice-num-step", type=int, choices=[4, 8, 16], help="OmniVoice diffusion steps; production default is 8 (4 smoke test, 16 optional quality)")
 
     import_video = subparsers.add_parser("import-scene-video", help="Import a new immutable source-video version")
     import_video.add_argument("project_name")

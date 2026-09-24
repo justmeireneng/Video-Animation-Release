@@ -82,6 +82,7 @@ export type Scene = {
   index: number;
   approved: boolean;
   durationInFrames: number;
+  narrationOffsetFrames?: number;
   image?: string;
   comparisonImage?: string;
   narration: string;

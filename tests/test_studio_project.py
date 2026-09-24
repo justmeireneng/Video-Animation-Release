@@ -181,7 +181,7 @@ class TestStudioProject(unittest.TestCase):
         prepared = []
 
         def prepare(_service, *, synthesize=True, num_step=None, on_scene=None, included_scene_ids=None):
-            self.assertEqual(num_step, 4)
+            self.assertEqual(num_step, 8)
             self.assertEqual(included_scene_ids, {"scene_01"})
             prepared.append(num_step)
             if on_scene:
@@ -218,7 +218,7 @@ class TestStudioProject(unittest.TestCase):
                 time.sleep(0.01)
             self.assertEqual(app.render_status(self.project_id)["status"], "complete")
             self.assertTrue(app.render_media_path(self.project_id, "final").is_file())
-            self.assertEqual(prepared, [4], "Final render must reuse approved narration audio")
+            self.assertEqual(prepared, [8], "Final render must reuse approved narration audio")
             self.assertEqual(StudioApplication(self.root).render_status(self.project_id)["status"], "complete")
             ui_root = self.root / "ui"
             ui_root.mkdir()
