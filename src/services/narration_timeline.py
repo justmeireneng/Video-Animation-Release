@@ -139,6 +139,7 @@ class NarrationTimelineService:
         # Desktop projects may use only the explicitly selected local provider.
         # Never replace a failed OmniVoice render with a cloud or mock voice.
         voice_service = VoiceService(self.project_root, fallback=not is_desktop_project)
+        source_store = SceneVideoStore(self.repo_root, self.project_name)
         scenes: list[dict[str, Any]] = []
         report: list[dict[str, Any]] = []
         transitions = ["crossfade", "soft_slide", "crossfade", "paper"]
@@ -200,7 +201,27 @@ class NarrationTimelineService:
             duration = self._audio_duration(output)
             _, sample_rate = wav_metadata(output)
             phrases = self._phrases(str(item["narration"]))
-            scene_frames = math.ceil((duration + post_roll) * fps) + pre_roll_frames
+            narration_target = duration + post_roll
+            source_audio_duration = 0.0
+            try:
+                metadata = source_store.load_metadata(scene_id)
+            except (ValueError, KeyError):
+                # Legacy narration-only projects may not have imported source
+                # metadata; in that case narration remains the timing master.
+                metadata = {}
+            for version in metadata.get("versions", []):
+                if version.get("status") != "approved":
+                    continue
+                policy = version.get("source_audio") or {}
+                if not policy.get("enabled") or policy.get("mode") == "mute":
+                    continue
+                probe = version.get("probe") or {}
+                source_audio_duration = max(
+                    source_audio_duration,
+                    float(probe.get("audio_duration") or (probe.get("duration") if probe.get("has_audio") else 0) or 0),
+                )
+            scene_target = max(narration_target, source_audio_duration)
+            scene_frames = math.ceil(scene_target * fps) + pre_roll_frames
             scene = dict(existing_scenes.get(scene_id, {}))
             scene.update({
                 "id": scene_id,
@@ -225,6 +246,8 @@ class NarrationTimelineService:
                 "voice_duration": round(duration, 3),
                 "target_duration": round(scene_frames / fps, 3),
                 "timeline_duration": round(scene_frames / fps, 3),
+                "source_audio_duration": round(source_audio_duration, 3),
+                "timing_target": "source_audio" if source_audio_duration > narration_target else "narration",
                 "pre_roll_seconds": round(pre_roll_frames / fps, 3),
                 "post_roll_seconds": round((scene_frames - pre_roll_frames) / fps - duration, 3),
                 "voice_speed": scene_voice_config.speed,

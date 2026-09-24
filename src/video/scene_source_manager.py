@@ -62,6 +62,7 @@ def probe_video(path: Path, repo_root: Path) -> dict[str, Any]:
     width = int(video_stream.get("width") or 0)
     height = int(video_stream.get("height") or 0)
     duration = float(video_stream.get("duration") or raw.get("format", {}).get("duration") or 0)
+    audio_duration = float((audio_stream or {}).get("duration") or raw.get("format", {}).get("duration") or 0) if audio_stream else 0.0
     if duration <= 0 or width <= 0 or height <= 0:
         raise ValueError(f"Unreadable video metadata: {path}")
     return {
@@ -70,6 +71,7 @@ def probe_video(path: Path, repo_root: Path) -> dict[str, Any]:
         "video_bitrate": int(video_stream.get("bit_rate") or 0),
         "bitrate": int(raw.get("format", {}).get("bit_rate") or 0),
         "has_audio": audio_stream is not None, "audio_codec": audio_stream.get("codec_name") if audio_stream else None,
+        "audio_duration": round(audio_duration, 3) if audio_duration > 0 else 0.0,
         "aspect_ratio": f"{width}:{height}", "portrait": height >= width, "readable": True,
     }
 
@@ -213,6 +215,7 @@ class SceneVideoStore:
             raise ValueError(f"Invalid trim {start}-{end}; clip duration is {duration}s.")
         record["trim"] = {"start": round(start, 3), "end": round(end, 3)}
         previous_timing = dict(record.get("timing") or {})
+        previous_timing["manual_trim"] = True
         timing = _timing_policy(end - start, float(self._scene(scene_id)["durationInFrames"]) / self._fps())
         # A creator-set speed/hold choice must survive later trim edits.  The
         # automatic policy only supplies defaults for unedited clips.
@@ -373,6 +376,13 @@ class SceneVideoStore:
         trim_end = float(item["trim"]["end"] or item["probe"]["duration"])
         timing = dict(item.get("timing", {}))
         if target_duration is not None and not timing.get("manual_playback_rate"):
+            if not timing.get("manual_trim"):
+                # Import-time trim recommendations are provisional. Once the
+                # narration or source-audio duration is known, recompute from
+                # the complete source clip instead of holding an old 5-second
+                # default trim.
+                trim_start = float(item["trim"]["start"])
+                trim_end = float(item["probe"].get("duration") or trim_end)
             automatic = _timing_policy(trim_end - trim_start, target_duration)
             recommended_end = automatic.pop("recommended_trim_end", None)
             if recommended_end is not None:
