@@ -18,13 +18,19 @@ export const SceneVisual = ({scene, projectSlug, fullBleed = false}: Props) => {
   const visibleFrames = Math.max(1, Math.round((trimAfter - trimBefore) / playbackRate));
   const sourceEndFrame = Math.min(visibleFrames, durationInFrames);
   const holdFrames = Math.max(0, durationInFrames - visibleFrames);
-  const audio = source.sourceAudio ?? {mode: 'mute', enabled: false, volume: 0, duck_under_narration: true, fade_in: 0, fade_out: 0};
+  // Keep legacy/partially migrated source projections audible by default. An
+  // explicit `mute` policy still wins; this fallback only applies when the
+  // imported source has no audio metadata at all.
+  const audio = source.sourceAudio ?? {mode: 'background', enabled: true, volume: 0.30, duck_under_narration: true, fade_in: 0.15, fade_out: 0.20};
   const narrationActive = scene.subtitle.some((phrase) => frame >= phrase.startFrame && frame < phrase.endFrame);
   const duck = audio.mode === 'background' && audio.duck_under_narration && narrationActive ? 0.45 : 1;
   const fadeInFrames = Math.max(1, Math.round(audio.fade_in * fps));
   const fadeOutFrames = Math.max(1, Math.round(audio.fade_out * fps));
   const fadeIn = interpolate(frame, [0, fadeInFrames], [0, 1], {extrapolateRight: 'clamp'});
-  const fadeOut = interpolate(frame, [Math.max(0, sourceEndFrame - fadeOutFrames), sourceEndFrame], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
+  // Fade source audio at the end of the narration-driven scene, not when the
+  // visual clip ends. This lets an ASMR bed continue while the last frame is
+  // held for a longer narration.
+  const fadeOut = interpolate(frame, [Math.max(0, durationInFrames - fadeOutFrames), durationInFrames], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
   const sourceVolume = audio.enabled && audio.mode !== 'mute' ? audio.volume * duck * fadeIn * fadeOut : 0;
   const holdScale = holdFrames > Math.round(1.5 * fps)
     ? interpolate(Math.max(0, frame - visibleFrames), [0, holdFrames], [1, 1.03], {extrapolateRight: 'clamp'})
@@ -35,17 +41,43 @@ export const SceneVisual = ({scene, projectSlug, fullBleed = false}: Props) => {
     objectFit: source.crop.mode,
     objectPosition: `${source.crop.x * 100}% ${source.crop.y * 100}%`,
   } as const;
-  const video = (muted = sourceVolume === 0) => (
+  const video = () => (
     <OffthreadVideo
       src={staticFile(`${projectSlug}/${source.src}`)}
       trimBefore={trimBefore}
       trimAfter={trimAfter}
       playbackRate={playbackRate}
-      muted={muted}
-      volume={muted ? 0 : sourceVolume}
+      muted
+      volume={0}
       style={style}
     />
   );
+  // Read the final source frame directly instead of freezing the playback
+  // timeline. This remains reliable when the clip was slowed to 0.95x before
+  // the narration-required hold begins.
+  const lastFrameVideo = (
+    <OffthreadVideo
+      src={staticFile(`${projectSlug}/${source.src}`)}
+      trimBefore={Math.max(trimBefore, trimAfter - 1)}
+      trimAfter={trimAfter}
+      muted
+      volume={0}
+      style={style}
+    />
+  );
+  const sourceAudio = audio.enabled && audio.mode !== 'mute' ? (
+    <div style={{position: 'absolute', width: 1, height: 1, opacity: 0, pointerEvents: 'none'}}>
+      <OffthreadVideo
+        src={staticFile(`${projectSlug}/${source.src}`)}
+        trimBefore={trimBefore}
+        trimAfter={trimAfter}
+        playbackRate={playbackRate}
+        muted={false}
+        volume={sourceVolume}
+        style={{width: 1, height: 1}}
+      />
+    </div>
+  ) : null;
 
   return (
     <div style={{position: 'absolute', inset: 0, overflow: 'hidden', borderRadius: fullBleed ? 0 : 34, background: '#172131'}}>
@@ -55,10 +87,15 @@ export const SceneVisual = ({scene, projectSlug, fullBleed = false}: Props) => {
       ) : (
         <Sequence durationInFrames={Math.min(visibleFrames, durationInFrames)}>{video()}</Sequence>
       )}
+      {sourceAudio ? (source.holdLastFrame || source.loop ? (
+        <Loop durationInFrames={durationInFrames}>{sourceAudio}</Loop>
+      ) : (
+        <Sequence durationInFrames={Math.min(visibleFrames, durationInFrames)}>{sourceAudio}</Sequence>
+      )) : null}
       {source.holdLastFrame && visibleFrames < durationInFrames ? (
         <Sequence from={visibleFrames} durationInFrames={durationInFrames - visibleFrames}>
           <div style={{width: '100%', height: '100%', transform: `scale(${holdScale})`}}>
-            <Freeze frame={visibleFrames - 1}>{video(true)}</Freeze>
+            <Freeze frame={0}>{lastFrameVideo}</Freeze>
           </div>
         </Sequence>
       ) : null}

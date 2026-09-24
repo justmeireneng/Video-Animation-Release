@@ -43,6 +43,8 @@ send projects or source media to a cloud service.
    in the approved preview instead of generating it again. OmniVoice releases
    its model memory before Remotion starts.
    Preview MP4s render at 720×1280; final MP4s use 1080×1920.
+   Source video audio defaults to Background with ducking under narration; it
+   remains a separate mix track and continues through a held-last-frame section.
 6. Watch the preview in Final Review. Keep or cut scenes and make trim, crop,
    source-audio, 0.50–2.00x video-speed, hold-last-frame and transition edits
    non-destructively. These decisions are saved per project; cut scenes are

@@ -40,7 +40,7 @@ class VoiceControlState:
     voiceMode: str = DEFAULT_VOICE_MODE
     gender: str = "male"
     age: str = "young adult"
-    pitch: str = "moderate"
+    pitch: str = "low"
     speed: float = 1.10
     voiceId: str | None = None
     referenceAudio: str | None = None
@@ -82,7 +82,7 @@ class VoiceControlService:
             voiceMode=config.mode,
             gender=str(design.get("gender") or "male"),
             age=str(design.get("age") or "young adult"),
-            pitch=str(design.get("pitch") or "moderate"),
+            pitch=str(design.get("pitch") or "low"),
             speed=config.speed if config.selected_preview else 1.10,
             voiceId=config.voice_id,
             referenceAudio=str(config.reference_audio) if config.reference_audio else None,
@@ -295,7 +295,7 @@ class VoiceControlService:
                     mode="voice_design",
                     voice_id=None,
                     language="vi",
-                    design={"gender": gender, "pitch": "moderate"},
+                    design={"gender": gender, "pitch": "low"},
                     speed=speed,
                     approval_required=True,
                     approved=False,
@@ -349,7 +349,7 @@ class VoiceControlService:
         self.state.voiceProvider = config.provider
         self.state.voiceMode = config.mode
         self.state.gender = str(config.design.get("gender") or "male")
-        self.state.pitch = str(config.design.get("pitch") or "moderate")
+        self.state.pitch = str(config.design.get("pitch") or "low")
         self.state.speed = config.speed
         self.state.voiceId = config.voice_id
         self.state.previewFile = preview["file"]

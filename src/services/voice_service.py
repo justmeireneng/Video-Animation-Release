@@ -20,7 +20,9 @@ DEFAULT_PREVIEW_TEXT = (
 )
 
 DEFAULT_VOICE_MODE = "voice_design"
-DEFAULT_OMNIVOICE_DESIGN = {"gender": "male", "age": "young adult", "pitch": "moderate"}
+# A slightly lower pitch makes Vietnamese narration warmer and less synthetic
+# without changing the configured reading speed.
+DEFAULT_OMNIVOICE_DESIGN = {"gender": "male", "age": "young adult", "pitch": "low"}
 PRODUCTION_VOICE_STEPS = 8
 OMNIVOICE_MODEL_ID = "k2-fsa/OmniVoice"
 

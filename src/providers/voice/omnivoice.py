@@ -179,7 +179,10 @@ class OmniVoiceProvider(VoiceProvider):
             return None
         design = options.get("design") if isinstance(options.get("design"), dict) else {}
         age = {"older adult": "elderly"}.get(str(design.get("age", "")), design.get("age"))
-        values = [design.get("gender"), age, f"{design.get('pitch')} pitch" if design.get("pitch") else None]
+        pitch = {"low": "slightly low", "moderate": "moderate", "high": "high"}.get(
+            str(design.get("pitch")), design.get("pitch")
+        )
+        values = [design.get("gender"), age, f"{pitch} pitch" if pitch else None]
         return ", ".join(str(value) for value in values if value)
 
     @classmethod

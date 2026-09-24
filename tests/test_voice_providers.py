@@ -213,7 +213,7 @@ class TestVoiceProviders(unittest.TestCase):
         default = VoiceConfig()
         self.assertEqual(default.provider, "omnivoice")
         self.assertEqual(default.mode, "voice_design")
-        self.assertEqual(default.design, {"gender": "male", "age": "young adult", "pitch": "moderate"})
+        self.assertEqual(default.design, {"gender": "male", "age": "young adult", "pitch": "low"})
         self.assertEqual(default.speed, 1.10)
         legacy = VoiceConfig.from_project({"voice": "vi-VN-NamMinhNeural", "language": "vi-VN", "rate": "-8%"})
         self.assertEqual(legacy.provider, "omnivoice")

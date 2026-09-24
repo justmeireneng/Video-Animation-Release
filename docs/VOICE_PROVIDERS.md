@@ -30,7 +30,7 @@ and no Edge TTS/cloud fallback is used.
 | Reference audio | Available for Voice Clone |
 | Preview before video render | Available |
 
-The speed control is passed to OmniVoice's native `speed` input and does not alter the pitch setting. The presets are 0.95 Slow, 1.00 Normal, 1.08 Natural+, 1.10 Default, 1.12 Fast, and 1.15 Fast+.
+The speed control is passed to OmniVoice's native `speed` input and does not alter the pitch setting. New projects use a slightly low pitch for a warmer, less synthetic timbre. The presets are 0.95 Slow, 1.00 Normal, 1.08 Natural+, 1.10 Default, 1.12 Fast, and 1.15 Fast+.
 
 Voice speed is a project-level setting and remains fixed across scenes. Narration
 duration is the timing master; fitting narration by changing its speed is blocked
@@ -57,7 +57,7 @@ The active default is:
     "design": {
       "gender": "male",
       "age": "young adult",
-      "pitch": "moderate"
+      "pitch": "low"
     },
     "speed": 1.10
   }

@@ -63,7 +63,7 @@ const state = {
   sceneState: { items: [], selectedId: null, sceneCount: 0, timelineZoom: 1 },
   scriptState: { bulkText: "", mapped: 0, missing: 0, approved: false },
   voiceState: {
-    provider: "omnivoice", language: "vi", locale: "default", mode: "voice_design", gender: "male", age: "young adult", pitch: "moderate", style: "documentary", speed: 1.1,
+    provider: "omnivoice", language: "vi", locale: "default", mode: "voice_design", gender: "male", age: "young adult", pitch: "low", style: "documentary", speed: 1.1,
     profileId: null, previewSceneId: null, previewStatus: "NOT GENERATED", previewUrl: null, playing: false, subtitleSync: "PENDING", advancedOpen: false,
     profiles: [], history: [], comparisons: [], pronunciation: [],
   },
@@ -149,7 +149,7 @@ function applyBackendProject(detail) {
     bgm: Math.round(Number(projectAudio.bgm_volume ?? 0.12) * 100),
   };
   state.scriptState = { bulkText: detail.script_text || "", mapped: state.sceneState.items.filter(scene => scene.narration).length, missing: state.sceneState.items.filter(scene => !scene.narration).length, approved: Boolean(manifest.script?.approved) };
-  state.voiceState = { ...structuredClone(DEFAULT_VOICE_STATE), provider: voice.provider || "omnivoice", language: voice.language || "vi", locale: voice.locale || "default", mode: voice.mode || "voice_design", gender: voice.design?.gender || "male", age: voice.design?.age || "young adult", pitch: voice.design?.pitch || "moderate", speed: voice.speed || 1.1, previewSceneId: voice.preview_scene_id || null, previewStatus: voice.preview_file ? "GENERATED" : "NOT GENERATED", previewUrl: voice.preview_file ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/voice/preview?t=${encodeURIComponent(manifest.updated_at || "")}` : null };
+  state.voiceState = { ...structuredClone(DEFAULT_VOICE_STATE), provider: voice.provider || "omnivoice", language: voice.language || "vi", locale: voice.locale || "default", mode: voice.mode || "voice_design", gender: voice.design?.gender || "male", age: voice.design?.age || "young adult", pitch: voice.design?.pitch || "low", speed: voice.speed || 1.1, previewSceneId: voice.preview_scene_id || null, previewStatus: voice.preview_file ? "GENERATED" : "NOT GENERATED", previewUrl: voice.preview_file ? `${STUDIO_API}/projects/${encodeURIComponent(summary.id)}/voice/preview?t=${encodeURIComponent(manifest.updated_at || "")}` : null };
   state.workflowState = { scriptApproved: Boolean(manifest.script?.approved), voiceApproved: Boolean(voice.approved), previewReady: Boolean(manifest.render?.preview_ready), previewApproved: Boolean(manifest.render?.preview_approved), finalReady: Boolean(manifest.render?.final_ready) };
   state.reviewState = { finalized: Boolean(manifest.render?.final_ready), dirty: Boolean(manifest.render?.review_dirty), showCutsOnly: false };
   state.automationState = { status: summary.imported ? "SOURCE READY" : "IDLE", progress: summary.imported ? 100 : 0, step: summary.imported ? 1 : 0 };

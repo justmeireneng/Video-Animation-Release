@@ -25,7 +25,7 @@ DEFAULT_VOICE = {
     "mode": "voice_design",
     "language": "vi",
     "locale": "default",
-    "design": {"gender": "male", "age": "young adult", "pitch": "moderate"},
+    "design": {"gender": "male", "age": "young adult", "pitch": "low"},
     "speed": 1.10,
     "approved": False,
 }

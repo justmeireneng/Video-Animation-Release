@@ -307,7 +307,7 @@ class StudioApplication:
         design = dict(manifest.get("voice", {}).get("design") or {})
         if mode == "voice_design":
             gender = str(request.get("gender", design.get("gender", "male")))
-            pitch = str(request.get("pitch", design.get("pitch", "moderate")))
+            pitch = str(request.get("pitch", design.get("pitch", "low")))
             age = str(request.get("age", design.get("age", "young adult")))
             if gender not in {"male", "female"} or not capabilities.get("gender"):
                 raise StudioApiError("The active provider cannot apply that gender setting.")
