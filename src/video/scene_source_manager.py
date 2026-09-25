@@ -397,12 +397,19 @@ class SceneVideoStore:
         elif target_duration is not None and not timing.get("manual_hold_last_frame"):
             visible_duration = (trim_end - trim_start) / max(0.01, float(timing.get("playback_rate") or 1.0))
             timing["hold_last_frame"] = visible_duration < target_duration - 1 / 30
+        visible_duration = (trim_end - trim_start) / max(0.01, float(timing.get("playback_rate") or 1.0))
+        # Keep the projection truthful even for legacy metadata whose timing
+        # block predates narration-driven scene extension. The compositor must
+        # freeze the last real frame instead of exposing a review placeholder.
+        hold_last_frame = bool(timing.get("hold_last_frame", False))
+        if target_duration is not None and visible_duration < target_duration - 1 / 30:
+            hold_last_frame = True
         return {
             "src": item["source_video"], "provider": item["source_provider"],
             "sourceFilename": item["source_filename"], "version": item["version"], "review": item["status"],
             "duration": item["probe"]["duration"], "trim": {"start": trim_start, "end": round(trim_end, 3)},
             "crop": item["crop"], "playbackRate": timing.get("playback_rate", 1.0),
-            "holdLastFrame": timing.get("hold_last_frame", False), "loop": timing.get("loop", False),
+            "holdLastFrame": hold_last_frame, "loop": timing.get("loop", False),
             "sourceAudio": {
                 **item["source_audio"],
                 "audio_duration": round(float((item.get("probe") or {}).get("audio_duration") or 0), 3),

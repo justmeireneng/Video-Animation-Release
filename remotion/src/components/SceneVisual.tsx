@@ -43,6 +43,10 @@ export const SceneVisual = ({scene, projectSlug, fullBleed = false}: Props) => {
   const visibleFrames = Math.max(1, Math.round((trimAfter - trimBefore) / playbackRate));
   const sourceEndFrame = Math.min(visibleFrames, durationInFrames);
   const holdFrames = Math.max(0, durationInFrames - visibleFrames);
+  // A narration or source-audio timeline can legitimately outlive the visual
+  // clip. In that case the last real video frame is always the safe visual;
+  // falling back to SceneImage would expose the review placeholder mid-scene.
+  const shouldHoldLastFrame = visibleFrames < durationInFrames;
   // Keep legacy/partially migrated source projections audible by default. An
   // explicit `mute` policy still wins; this fallback only applies when the
   // imported source has no audio metadata at all.
@@ -69,7 +73,7 @@ export const SceneVisual = ({scene, projectSlug, fullBleed = false}: Props) => {
   const fadeOut = interpolate(frame, [Math.max(0, durationInFrames - fadeOutFrames), durationInFrames], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
   const audioDurationFrames = audio.audio_duration ? Math.round(audio.audio_duration * fps) : 0;
   const audioCoversScene = audioDurationFrames >= durationInFrames - 1;
-  const audioLoops = source.loop || (source.holdLastFrame && !audioCoversScene);
+  const audioLoops = source.loop || (shouldHoldLastFrame && !audioCoversScene);
   const loopFadeFrames = Math.max(3, Math.round(0.12 * fps));
   const loopFrame = visibleFrames > 0 ? frame % visibleFrames : 0;
   // The media loop restarts on an exact frame boundary.  Fade each repeated
@@ -141,7 +145,7 @@ export const SceneVisual = ({scene, projectSlug, fullBleed = false}: Props) => {
       ) : (
         <Sequence durationInFrames={Math.min(audioCoversScene ? durationInFrames : visibleFrames, durationInFrames)}>{sourceAudio}</Sequence>
       )) : null}
-      {source.holdLastFrame && visibleFrames < durationInFrames ? (
+      {shouldHoldLastFrame ? (
         <Sequence from={visibleFrames} durationInFrames={durationInFrames - visibleFrames}>
           <div style={{width: '100%', height: '100%', transform: `scale(${holdScale})`}}>
             <Freeze frame={0}>{lastFrameVideo}</Freeze>

@@ -137,6 +137,22 @@ class TestSceneVideoStore(unittest.TestCase):
         self.assertEqual(longer["recommended_trim_end"], 10.0)
         self.assertFalse(longer["hold_last_frame"])
 
+    def test_projection_always_freezes_when_timeline_outlives_visual(self):
+        projection = SceneVideoStore._source_projection({
+            "source_video": "scenes/scene_01/source/flow_v1.mp4",
+            "source_provider": "google_flow_manual",
+            "source_filename": "scene.mp4",
+            "version": 1,
+            "status": "approved",
+            "probe": {"duration": 8.0, "audio_duration": 8.0},
+            "trim": {"start": 0.0, "end": 8.0},
+            "crop": {"mode": "cover", "x": 0.5, "y": 0.5},
+            "timing": {"playback_rate": 1.0, "hold_last_frame": False, "loop": False},
+            "source_audio": {"mode": "background", "enabled": True, "volume": 0.3,
+                             "duck_under_narration": True, "fade_in": 0.15, "fade_out": 0.2},
+        }, target_duration=11.0)
+        self.assertTrue(projection["holdLastFrame"])
+
     def test_subtitle_phrase_groups_stay_compact(self):
         phrases = NarrationTimelineService._phrases(
             "Đại Tây Dương không chỉ là một khoảng nước nằm giữa các lục địa."
