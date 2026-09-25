@@ -219,6 +219,13 @@ class TestVoiceProviders(unittest.TestCase):
         self.assertEqual(legacy.provider, "omnivoice")
         self.assertAlmostEqual(legacy.speed, 0.92)
 
+    def test_omnivoice_low_pitch_uses_supported_native_instruct_token(self):
+        instruction = OmniVoiceProvider._instruction({
+            "mode": "voice_design",
+            "design": {"gender": "male", "age": "young adult", "pitch": "low"},
+        })
+        self.assertEqual(instruction, "male, young adult, low pitch")
+
     def test_cache_and_preview_do_not_need_video(self):
         fake = FakeProvider()
         registry = ProviderRegistry({"fake": lambda: fake})

@@ -179,7 +179,10 @@ class OmniVoiceProvider(VoiceProvider):
             return None
         design = options.get("design") if isinstance(options.get("design"), dict) else {}
         age = {"older adult": "elderly"}.get(str(design.get("age", "")), design.get("age"))
-        pitch = {"low": "slightly low", "moderate": "moderate", "high": "high"}.get(
+        # OmniVoice's native instruct parser accepts only its documented
+        # pitch tokens.  Do not invent a "slightly low" variant: it causes
+        # the whole voice stage to fail before any video render starts.
+        pitch = {"low": "low", "moderate": "moderate", "high": "high"}.get(
             str(design.get("pitch")), design.get("pitch")
         )
         values = [design.get("gender"), age, f"{pitch} pitch" if pitch else None]
