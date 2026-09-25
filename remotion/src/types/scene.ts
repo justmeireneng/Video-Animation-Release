@@ -74,6 +74,7 @@ export type SceneVideoSource = {
     duck_under_narration: boolean;
     fade_in: number;
     fade_out: number;
+    audio_duration?: number;
   };
 };
 

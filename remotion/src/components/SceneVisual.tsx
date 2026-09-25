@@ -5,6 +5,31 @@ import {SceneImage} from './SceneImage';
 
 type Props = {scene: Scene; projectSlug: string; fullBleed?: boolean};
 
+const DUCK_GAIN = 0.45;
+const DUCK_ATTACK_FRAMES = 4;
+const DUCK_RELEASE_FRAMES = 10;
+
+/**
+ * Return a smooth source-audio gain around subtitle phrase boundaries.
+ * Subtitle timing is the only narration timing available in the composition,
+ * so use short attack/release ramps instead of hard per-frame toggles. This
+ * prevents ASMR beds from clicking or jumping in volume between phrases.
+ */
+const narrationDuckGain = (scene: Scene, frame: number, fps: number): number => {
+  const attack = Math.max(DUCK_ATTACK_FRAMES, Math.round(0.12 * fps));
+  const release = Math.max(DUCK_RELEASE_FRAMES, Math.round(0.32 * fps));
+  return scene.subtitle.reduce((gain, phrase) => {
+    const start = phrase.startFrame;
+    const end = phrase.endFrame;
+    if (frame < start - attack || frame > end + release) return gain;
+    if (frame < start) {
+      return Math.min(gain, interpolate(frame, [start - attack, start], [1, DUCK_GAIN], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}));
+    }
+    if (frame < end) return Math.min(gain, DUCK_GAIN);
+    return Math.min(gain, interpolate(frame, [end, end + release], [DUCK_GAIN, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}));
+  }, 1);
+};
+
 export const SceneVisual = ({scene, projectSlug, fullBleed = false}: Props) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
@@ -21,9 +46,20 @@ export const SceneVisual = ({scene, projectSlug, fullBleed = false}: Props) => {
   // Keep legacy/partially migrated source projections audible by default. An
   // explicit `mute` policy still wins; this fallback only applies when the
   // imported source has no audio metadata at all.
-  const audio = source.sourceAudio ?? {mode: 'background', enabled: true, volume: 0.30, duck_under_narration: true, fade_in: 0.15, fade_out: 0.20};
-  const narrationActive = scene.subtitle.some((phrase) => frame >= phrase.startFrame && frame < phrase.endFrame);
-  const duck = audio.mode === 'background' && audio.duck_under_narration && narrationActive ? 0.45 : 1;
+  // Merge defaults field-by-field so partially migrated projects cannot turn
+  // fade values into NaN or silently disable source audio.
+  const audio = {
+    mode: 'background' as const,
+    enabled: true,
+    volume: 0.30,
+    duck_under_narration: true,
+    fade_in: 0.15,
+    fade_out: 0.20,
+    ...(source.sourceAudio ?? {}),
+  };
+  const duck = audio.mode === 'background' && audio.duck_under_narration
+    ? narrationDuckGain(scene, frame, fps)
+    : 1;
   const fadeInFrames = Math.max(1, Math.round(audio.fade_in * fps));
   const fadeOutFrames = Math.max(1, Math.round(audio.fade_out * fps));
   const fadeIn = interpolate(frame, [0, fadeInFrames], [0, 1], {extrapolateRight: 'clamp'});
@@ -31,7 +67,20 @@ export const SceneVisual = ({scene, projectSlug, fullBleed = false}: Props) => {
   // visual clip ends. This lets an ASMR bed continue while the last frame is
   // held for a longer narration.
   const fadeOut = interpolate(frame, [Math.max(0, durationInFrames - fadeOutFrames), durationInFrames], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
-  const sourceVolume = audio.enabled && audio.mode !== 'mute' ? audio.volume * duck * fadeIn * fadeOut : 0;
+  const audioDurationFrames = audio.audio_duration ? Math.round(audio.audio_duration * fps) : 0;
+  const audioCoversScene = audioDurationFrames >= durationInFrames - 1;
+  const audioLoops = source.loop || (source.holdLastFrame && !audioCoversScene);
+  const loopFadeFrames = Math.max(3, Math.round(0.12 * fps));
+  const loopFrame = visibleFrames > 0 ? frame % visibleFrames : 0;
+  // The media loop restarts on an exact frame boundary.  Fade each repeated
+  // segment at that boundary to avoid a click or an obvious ASMR jump.
+  const loopEnvelope = audioLoops && frame >= visibleFrames
+    ? Math.min(
+      interpolate(loopFrame, [0, loopFadeFrames], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}),
+      interpolate(loopFrame, [Math.max(0, visibleFrames - loopFadeFrames), visibleFrames], [1, 0], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'}),
+    )
+    : 1;
+  const sourceVolume = audio.enabled && audio.mode !== 'mute' ? audio.volume * duck * fadeIn * fadeOut * loopEnvelope : 0;
   const holdScale = holdFrames > Math.round(1.5 * fps)
     ? interpolate(Math.max(0, frame - visibleFrames), [0, holdFrames], [1, 1.03], {extrapolateRight: 'clamp'})
     : 1;
@@ -87,10 +136,10 @@ export const SceneVisual = ({scene, projectSlug, fullBleed = false}: Props) => {
       ) : (
         <Sequence durationInFrames={Math.min(visibleFrames, durationInFrames)}>{video()}</Sequence>
       )}
-      {sourceAudio ? (source.holdLastFrame || source.loop ? (
+      {sourceAudio ? (audioLoops ? (
         <Loop durationInFrames={durationInFrames}>{sourceAudio}</Loop>
       ) : (
-        <Sequence durationInFrames={Math.min(visibleFrames, durationInFrames)}>{sourceAudio}</Sequence>
+        <Sequence durationInFrames={Math.min(audioCoversScene ? durationInFrames : visibleFrames, durationInFrames)}>{sourceAudio}</Sequence>
       )) : null}
       {source.holdLastFrame && visibleFrames < durationInFrames ? (
         <Sequence from={visibleFrames} durationInFrames={durationInFrames - visibleFrames}>

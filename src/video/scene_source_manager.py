@@ -71,6 +71,9 @@ def probe_video(path: Path, repo_root: Path) -> dict[str, Any]:
         "video_bitrate": int(video_stream.get("bit_rate") or 0),
         "bitrate": int(raw.get("format", {}).get("bit_rate") or 0),
         "has_audio": audio_stream is not None, "audio_codec": audio_stream.get("codec_name") if audio_stream else None,
+        "audio_sample_rate": int(audio_stream.get("sample_rate") or 0) if audio_stream else 0,
+        "audio_channels": int(audio_stream.get("channels") or 0) if audio_stream else 0,
+        "audio_bitrate": int(audio_stream.get("bit_rate") or 0) if audio_stream else 0,
         "audio_duration": round(audio_duration, 3) if audio_duration > 0 else 0.0,
         "aspect_ratio": f"{width}:{height}", "portrait": height >= width, "readable": True,
     }
@@ -400,7 +403,10 @@ class SceneVideoStore:
             "duration": item["probe"]["duration"], "trim": {"start": trim_start, "end": round(trim_end, 3)},
             "crop": item["crop"], "playbackRate": timing.get("playback_rate", 1.0),
             "holdLastFrame": timing.get("hold_last_frame", False), "loop": timing.get("loop", False),
-            "sourceAudio": item["source_audio"],
+            "sourceAudio": {
+                **item["source_audio"],
+                "audio_duration": round(float((item.get("probe") or {}).get("audio_duration") or 0), 3),
+            },
         }
 
     @classmethod

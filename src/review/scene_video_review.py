@@ -37,7 +37,7 @@ def _page(store: SceneVideoStore, scene_id: str, selected: int | None = None, me
     if trim.get("end") is None:
         trim = {**trim, "end": record.get("probe", {}).get("duration", data.get("duration", 0)) if record else data.get("duration", 0)}
     crop = record.get("crop", {"mode": "cover", "x": 0.5, "y": 0.5}) if record else {"mode": "cover", "x": 0.5, "y": 0.5}
-    source_audio = record.get("source_audio", {"mode": "mute", "volume": 0, "duck_under_narration": True}) if record else {"mode": "mute", "volume": 0, "duck_under_narration": True}
+    source_audio = record.get("source_audio", {"mode": "background", "enabled": True, "volume": 0.30, "duck_under_narration": True, "fade_in": 0.15, "fade_out": 0.20}) if record else {"mode": "background", "enabled": True, "volume": 0.30, "duck_under_narration": True, "fade_in": 0.15, "fade_out": 0.20}
     return f"""<!doctype html>
 <html lang="vi"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>{html.escape(scene_id)} video review</title>

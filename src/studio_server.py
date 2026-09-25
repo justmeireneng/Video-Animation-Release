@@ -428,7 +428,7 @@ class StudioApplication:
             result = store.set_crop(scene_id, version, float(request.get("x", 0.5)), float(request.get("y", 0.5)), str(request.get("mode", "cover")))
         elif action == "source_audio":
             result = store.set_source_audio(
-                scene_id, version, str(request.get("mode", "mute")), request.get("volume"), request.get("duck"),
+                scene_id, version, str(request.get("mode", "background")), request.get("volume"), request.get("duck"),
                 request.get("fade_in"), request.get("fade_out"),
             )
         elif action == "transition":

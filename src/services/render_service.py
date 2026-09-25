@@ -89,12 +89,40 @@ class FFmpegFinalizer:
         completed = subprocess.run([
             str(self._ffmpeg()), "-y", "-loglevel", "error", "-i", str(source),
             "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy",
-            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "192k", "-ar", "48000",
+            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
             "-movflags", "+faststart", str(output),
         ], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
         if completed.returncode != 0:
             raise RuntimeError(f"FFmpeg finalization failed: {(completed.stderr or '').strip()[-500:]}")
         return output
+
+    def normalize_audio(self, source: Path, *, quality: str) -> Path:
+        """Normalize a preview's audio without changing its video dimensions.
+
+        Remotion already produces the requested canvas.  This pass only
+        standardizes loudness, sample rate, channel layout, and AAC encoding;
+        it deliberately stream-copies the video so there is no hidden scale
+        or second visual render.
+        """
+        actual = probe_video(source, self.repo_root)
+        if (
+            actual.get("audio_codec") == "aac"
+            and int(actual.get("audio_sample_rate") or 0) == 48000
+            and int(actual.get("audio_channels") or 0) == 2
+        ):
+            return source
+        temporary = source.with_name(source.stem + ".audio.tmp.mp4")
+        completed = subprocess.run([
+            str(self._ffmpeg()), "-y", "-loglevel", "error", "-i", str(source),
+            "-map", "0:v:0", "-map", "0:a:0", "-c:v", "copy",
+            "-af", "loudnorm=I=-16:TP=-1.5:LRA=11", "-c:a", "aac", "-b:a", "192k", "-ar", "48000", "-ac", "2",
+            "-movflags", "+faststart", str(temporary),
+        ], capture_output=True, text=True, encoding="utf-8", errors="replace", check=False)
+        if completed.returncode != 0:
+            temporary.unlink(missing_ok=True)
+            raise RuntimeError(f"FFmpeg audio normalization failed: {(completed.stderr or '').strip()[-500:]}")
+        temporary.replace(source)
+        return source
 
     def normalize_pixel_format(self, source: Path, *, quality: str) -> Path:
         """Normalize full-range yuvj420p from some Remotion ffmpeg builds.
@@ -210,6 +238,12 @@ class RenderService:
             errors.append(f"pixel format {actual['pixel_format']} != yuv420p")
         if not actual["has_audio"] or actual["audio_codec"] != "aac":
             errors.append(f"audio codec {actual['audio_codec'] or 'missing'} != aac")
+        audio_rate = int(actual.get("audio_sample_rate") or 0)
+        if audio_rate != 48000:
+            errors.append(f"audio sample rate {audio_rate} != 48000")
+        audio_channels = int(actual.get("audio_channels") or 0)
+        if audio_channels != 2:
+            errors.append(f"audio channels {audio_channels} != stereo")
         bitrate = int(actual.get("video_bitrate") or 0)
         warnings: list[str] = []
         if bitrate and not preset["min_video_bitrate"] <= bitrate <= preset["max_video_bitrate"]:
@@ -256,6 +290,16 @@ class RenderService:
             if not output.is_file() or output.stat().st_size == 0:
                 raise RuntimeError("Preview renderer did not create a video file.")
             self.finalizer.normalize_pixel_format(output, quality="preview")
+            # Keep preview audio representative of final output.  The probe
+            # guard keeps mocked/unit-test renderers from invoking ffmpeg on a
+            # placeholder file; real files are always normalized or fail
+            # validation below.
+            try:
+                probe_video(output, self.repo_root)
+            except Exception:
+                pass
+            else:
+                self.finalizer.normalize_audio(output, quality="preview")
             self._validate_output(output, "preview", "preview")
         except Exception:
             self.state.set("NEEDS_CHANGES", "preview render failed")
